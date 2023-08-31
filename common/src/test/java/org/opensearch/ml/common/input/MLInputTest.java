@@ -113,8 +113,7 @@ public class MLInputTest {
         });
     }
 
-    @Test
-    public void parse_TextEmbedding() throws IOException {
+    private void parse_NLPModel(FunctionName functionName) throws IOException {
         String sentence = "test sentence";
         String column = "column1";
         Integer position = 1;
@@ -123,8 +122,9 @@ public class MLInputTest {
                 .targetResponsePositions(Arrays.asList(position))
                 .build();
         TextDocsInputDataSet inputDataset = TextDocsInputDataSet.builder().docs(Arrays.asList(sentence)).resultFilter(resultFilter).build();
-        String expectedInputStr = "{\"algorithm\":\"TEXT_EMBEDDING\",\"text_docs\":[\"test sentence\"],\"return_bytes\":false,\"return_number\":false,\"target_response\":[\"column1\"],\"target_response_positions\":[1]}";
-        testParse(FunctionName.TEXT_EMBEDDING, inputDataset, expectedInputStr, parsedInput -> {
+        String expectedInputStr = "{\"algorithm\":\"functionName\",\"text_docs\":[\"test sentence\"],\"return_bytes\":false,\"return_number\":false,\"target_response\":[\"column1\"],\"target_response_positions\":[1]}";
+        expectedInputStr = expectedInputStr.replace("functionName", functionName.toString());
+        testParse(functionName, inputDataset, expectedInputStr, parsedInput -> {
             assertNotNull(parsedInput.getInputDataset());
             TextDocsInputDataSet parsedInputDataSet = (TextDocsInputDataSet) parsedInput.getInputDataset();
             assertEquals(1, parsedInputDataSet.getDocs().size());
@@ -136,15 +136,29 @@ public class MLInputTest {
     }
 
     @Test
-    public void parse_TextEmbedding_NullResultFilter() throws IOException {
+    public void parse_TextEmbedding() throws IOException {
+        parse_NLPModel(FunctionName.TEXT_EMBEDDING);
+        parse_NLPModel(FunctionName.TOKENIZE);
+        parse_NLPModel(FunctionName.SPARSE_ENCODING);
+    }
+
+    private void parse_NLPModel_NullResultFilter(FunctionName functionName) throws IOException {
         String sentence = "test sentence";
         TextDocsInputDataSet inputDataset = TextDocsInputDataSet.builder().docs(Arrays.asList(sentence)).build();
-        String expectedInputStr = "{\"algorithm\":\"TEXT_EMBEDDING\",\"text_docs\":[\"test sentence\"]}";
-        testParse(FunctionName.TEXT_EMBEDDING, inputDataset, expectedInputStr, parsedInput -> {
+        String expectedInputStr = "{\"algorithm\":\"functionName\",\"text_docs\":[\"test sentence\"]}";
+        expectedInputStr = expectedInputStr.replace("functionName", functionName.toString());
+        testParse(functionName, inputDataset, expectedInputStr, parsedInput -> {
             assertNotNull(parsedInput.getInputDataset());
             assertEquals(1, ((TextDocsInputDataSet)parsedInput.getInputDataset()).getDocs().size());
             assertEquals(sentence, ((TextDocsInputDataSet)parsedInput.getInputDataset()).getDocs().get(0));
         });
+    }
+
+    @Test
+    public void parse_TextEmbedding_NullResultFilter() throws IOException {
+        parse_NLPModel_NullResultFilter(FunctionName.TEXT_EMBEDDING);
+        parse_NLPModel_NullResultFilter(FunctionName.TOKENIZE);
+        parse_NLPModel_NullResultFilter(FunctionName.SPARSE_ENCODING);
     }
 
     private void testParse(FunctionName algorithm, MLInputDataset inputDataset, String expectedInputStr, Consumer<MLInput> verify) throws IOException {

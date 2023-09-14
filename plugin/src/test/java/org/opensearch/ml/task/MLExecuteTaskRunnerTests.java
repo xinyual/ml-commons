@@ -148,14 +148,14 @@ public class MLExecuteTaskRunnerTests extends OpenSearchTestCase {
     }
 
     public void testExecuteTask_Success() {
-        taskRunner.executeTask(mlExecuteTaskRequest, listener);
+        taskRunner.executeTask(FunctionName.TEXT_EMBEDDING, mlExecuteTaskRequest, listener);
         verify(listener).onResponse(any(MLExecuteTaskResponse.class));
     }
 
     public void testExecuteTask_NoExecutorService() {
         exceptionRule.expect(IllegalArgumentException.class);
         when(threadPool.executor(anyString())).thenThrow(new IllegalArgumentException());
-        taskRunner.executeTask(mlExecuteTaskRequest, listener);
+        taskRunner.executeTask(FunctionName.TEXT_EMBEDDING, mlExecuteTaskRequest, listener);
         verify(listener, never()).onResponse(any(MLExecuteTaskResponse.class));
     }
 }

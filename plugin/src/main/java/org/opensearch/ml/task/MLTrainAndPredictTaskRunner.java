@@ -17,6 +17,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.ml.breaker.MLCircuitBreakerService;
 import org.opensearch.ml.cluster.DiscoveryNodeHelper;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLTask;
 import org.opensearch.ml.common.MLTaskState;
 import org.opensearch.ml.common.MLTaskType;
@@ -90,7 +91,7 @@ public class MLTrainAndPredictTaskRunner extends MLTaskRunner<MLTrainingTaskRequ
      * @param listener Action listener
      */
     @Override
-    protected void executeTask(MLTrainingTaskRequest request, ActionListener<MLTaskResponse> listener) {
+    protected void executeTask(FunctionName functionName, MLTrainingTaskRequest request, ActionListener<MLTaskResponse> listener) {
         MLInputDataType inputDataType = request.getMlInput().getInputDataset().getInputDataType();
         Instant now = Instant.now();
         MLTask mlTask = MLTask

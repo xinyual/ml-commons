@@ -89,7 +89,7 @@ public class TaskRunnerTests extends OpenSearchTestCase {
             }
 
             @Override
-            public void executeTask(MLTaskRequest request, ActionListener listener) {}
+            public void executeTask(FunctionName functionName, MLTaskRequest request, ActionListener listener) {}
         };
         mlTask = MLTask
             .builder()

@@ -126,7 +126,7 @@ public class MLPredictTaskRunner extends MLTaskRunner<MLPredictionTaskRequest, M
                 if (clusterService.localNode().getId().equals(node.getId())) {
                     log.debug("Execute ML predict request {} locally on node {}", request.getRequestID(), node.getId());
                     request.setDispatchTask(false);
-                    executeTask(request, listener);
+                    executeTask(functionName, request, listener);
                 } else {
                     log.debug("Execute ML predict request {} remotely on node {}", request.getRequestID(), node.getId());
                     request.setDispatchTask(false);
@@ -160,7 +160,7 @@ public class MLPredictTaskRunner extends MLTaskRunner<MLPredictionTaskRequest, M
      * @param listener Action listener
      */
     @Override
-    protected void executeTask(MLPredictionTaskRequest request, ActionListener<MLTaskResponse> listener) {
+    protected void executeTask(FunctionName functionName, MLPredictionTaskRequest request, ActionListener<MLTaskResponse> listener) {
         MLInputDataType inputDataType = request.getMlInput().getInputDataset().getInputDataType();
         Instant now = Instant.now();
         String modelId = request.getModelId();
@@ -177,7 +177,7 @@ public class MLPredictTaskRunner extends MLTaskRunner<MLPredictionTaskRequest, M
             .lastUpdateTime(now)
             .async(false)
             .build();
-        MLInput mlInput = request.getMlInput();
+        MLInput mlInput = new MLInput(functionName, request.getMlInput().getParameters(), request.getMlInput().getInputDataset());
         switch (inputDataType) {
             case SEARCH_QUERY:
                 ActionListener<MLInputDataset> dataFrameActionListener = ActionListener.wrap(dataSet -> {

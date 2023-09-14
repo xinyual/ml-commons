@@ -25,10 +25,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.ml.breaker.MLCircuitBreakerService;
 import org.opensearch.ml.cluster.DiscoveryNodeHelper;
-import org.opensearch.ml.common.MLModel;
-import org.opensearch.ml.common.MLTask;
-import org.opensearch.ml.common.MLTaskState;
-import org.opensearch.ml.common.MLTaskType;
+import org.opensearch.ml.common.*;
 import org.opensearch.ml.common.dataset.MLInputDataType;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.input.MLInput;
@@ -97,7 +94,7 @@ public class MLTrainingTaskRunner extends MLTaskRunner<MLTrainingTaskRequest, ML
     }
 
     @Override
-    protected void executeTask(MLTrainingTaskRequest request, ActionListener<MLTaskResponse> listener) {
+    protected void executeTask(FunctionName functionName, MLTrainingTaskRequest request, ActionListener<MLTaskResponse> listener) {
         MLInputDataType inputDataType = request.getMlInput().getInputDataset().getInputDataType();
         Instant now = Instant.now();
         MLTask mlTask = MLTask

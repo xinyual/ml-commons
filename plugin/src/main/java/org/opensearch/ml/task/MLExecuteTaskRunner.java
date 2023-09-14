@@ -85,7 +85,7 @@ public class MLExecuteTaskRunner extends MLTaskRunner<MLExecuteTaskRequest, MLEx
      * @param listener Action listener
      */
     @Override
-    protected void executeTask(MLExecuteTaskRequest request, ActionListener<MLExecuteTaskResponse> listener) {
+    protected void executeTask(FunctionName functionName, MLExecuteTaskRequest request, ActionListener<MLExecuteTaskResponse> listener) {
         threadPool.executor(EXECUTE_THREAD_POOL).execute(() -> {
             try {
                 mlStats.getStat(MLNodeLevelStat.ML_EXECUTING_TASK_COUNT).increment();
@@ -96,7 +96,6 @@ public class MLExecuteTaskRunner extends MLTaskRunner<MLExecuteTaskRequest, MLEx
 
                 // ActionListener<MLExecuteTaskResponse> wrappedListener = ActionListener.runBefore(listener, )
                 Input input = request.getInput();
-                FunctionName functionName = request.getFunctionName();
                 if (FunctionName.METRICS_CORRELATION.equals(functionName)) {
                     if (!isPythonModelEnabled) {
                         Exception exception = new IllegalArgumentException("This algorithm is not enabled from settings");

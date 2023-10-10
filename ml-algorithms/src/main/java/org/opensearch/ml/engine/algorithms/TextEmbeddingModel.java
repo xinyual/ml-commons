@@ -26,13 +26,17 @@ public abstract class TextEmbeddingModel extends DLModel {
     public ModelTensorOutput predict(String modelId, MLInput mlInput) throws TranslateException {
         MLInputDataset inputDataSet = mlInput.getInputDataset();
         List<ModelTensors> tensorOutputs = new ArrayList<>();
-        Output output;
         TextDocsInputDataSet textDocsInput = (TextDocsInputDataSet) inputDataSet;
         ModelResultFilter resultFilter = textDocsInput.getResultFilter();
+        List<Input> inputDocs = new ArrayList<>();
         for (String doc : textDocsInput.getDocs()) {
             Input input = new Input();
             input.add(doc);
-            output = getPredictor().predict(input);
+            inputDocs.add(input);
+        }
+        List<Output> outputs = getPredictor().batchPredict(inputDocs);
+        for (Output output: outputs)
+        {
             tensorOutputs.add(parseModelTensorOutput(output, resultFilter));
         }
         return new ModelTensorOutput(tensorOutputs);

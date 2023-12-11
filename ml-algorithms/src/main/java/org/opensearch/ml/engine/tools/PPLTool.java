@@ -94,6 +94,7 @@ public class PPLTool implements Tool {
 
     @Override
     public <T> void run(Map<String, String> parameters, ActionListener<T> listener) {
+        parameters = extractFromChatParameters(parameters);
         String indexName = parameters.get("index");
         String question = parameters.get("question");
         SearchRequest searchRequest = buildSearchRequest(indexName);
@@ -111,7 +112,7 @@ public class PPLTool implements Tool {
                     ModelTensors modelTensors = modelTensorOutput.getMlModelOutputs().get(0);
                     ModelTensor modelTensor = modelTensors.getMlModelTensors().get(0);
                     Map<String, String> dataAsMap = (Map<String, String>) modelTensor.getDataAsMap();
-                    String ppl = dataAsMap.get("output");
+                    String ppl = dataAsMap.get("response");
                     JSONObject jsonContent = new JSONObject(ImmutableMap.of("query", ppl));
                     PPLQueryRequest pplQueryRequest = new PPLQueryRequest(ppl, jsonContent, null, "jdbc");
                     TransportPPLQueryRequest transportPPLQueryRequest = new TransportPPLQueryRequest(pplQueryRequest);
@@ -312,5 +313,19 @@ public class PPLTool implements Tool {
             throw new UncheckedIOException("failed to parse ActionResponse into TransportPPLQueryResponse", e);
         }
 
+    }
+
+    private Map<String, String> extractFromChatParameters(Map<String, String> parameters)
+    {
+        if (parameters.containsKey("input"))
+        {
+            try {
+                Map<String, String> chatParameters = gson.fromJson(parameters.get("input"), Map.class);
+                parameters.putAll(chatParameters);
+            } finally {
+                return parameters;
+            }
+        }
+        return parameters;
     }
 }

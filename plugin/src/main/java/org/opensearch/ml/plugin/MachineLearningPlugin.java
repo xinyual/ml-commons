@@ -147,7 +147,6 @@ import org.opensearch.ml.engine.indices.MLIndicesHandler;
 import org.opensearch.ml.engine.indices.MLInputDatasetHandler;
 import org.opensearch.ml.engine.memory.ConversationIndexMemory;
 import org.opensearch.ml.engine.memory.MLMemoryManager;
-<<<<<<< HEAD
 import org.opensearch.ml.engine.tools.AgentTool;
 import org.opensearch.ml.engine.tools.CatIndexTool;
 import org.opensearch.ml.engine.tools.MLModelTool;

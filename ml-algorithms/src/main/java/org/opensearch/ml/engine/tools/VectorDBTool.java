@@ -7,24 +7,12 @@ package org.opensearch.ml.engine.tools;
 
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
-import java.io.IOException;
-import java.security.AccessController;
-import java.security.PrivilegedExceptionAction;
-import java.util.HashMap;
 import java.util.Map;
 
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
+import org.apache.commons.lang3.StringUtils;
 import org.opensearch.client.Client;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.ml.common.spi.tools.Tool;
 import org.opensearch.ml.common.spi.tools.ToolAnnotation;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.builder.SearchSourceBuilder;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -35,25 +23,17 @@ import lombok.extern.log4j.Log4j2;
  * This tool supports neural search with embedding models and knn index.
  */
 @Log4j2
+@Getter
+@Setter
 @ToolAnnotation(VectorDBTool.TYPE)
-public class VectorDBTool implements Tool {
+public class VectorDBTool extends AbstractRetrieverTool {
     public static final String TYPE = "VectorDBTool";
-    @Setter
-    @Getter
+    public static final String MODEL_ID_FIELD = "model_id";
+    public static final String EMBEDDING_FIELD = "embedding_field";
     private String name = TYPE;
-    private static String DEFAULT_DESCRIPTION = "Use this tool to search data in OpenSearch index.";
-    @Getter
-    @Setter
-    private String description = DEFAULT_DESCRIPTION;
-
-    private Client client;
-    private NamedXContentRegistry xContentRegistry;
-    private String index;
-    private String embeddingField;
-    private String[] sourceFields;
-    private String modelId;
-    private Integer docSize;
     private Integer k;
+    private String modelId;
+    private String embeddingField;
 
     @Builder
     public VectorDBTool(
@@ -66,81 +46,34 @@ public class VectorDBTool implements Tool {
         Integer docSize,
         String modelId
     ) {
-        this.client = client;
-        this.xContentRegistry = xContentRegistry;
-        this.index = index;
-        this.embeddingField = embeddingField;
-        this.sourceFields = sourceFields;
+        super(client, xContentRegistry, index, sourceFields, docSize);
         this.modelId = modelId;
-        this.docSize = docSize == null ? 2 : docSize;
-        this.k = k == null ? 10 : k;
+        this.embeddingField = embeddingField;
+        this.k = k == null ? DEFAULT_K : k;
     }
 
     @Override
-    public <T> void run(Map<String, String> parameters, ActionListener<T> listener) {
-        try {
-            String question = parameters.get("input");
-            try {
-                question = gson.fromJson(question, String.class);
-            } catch (Exception e) {
-                // throw new IllegalArgumentException("wrong input");
-            }
-            String query = "{\"query\":{\"neural\":{\""
-                + embeddingField
-                + "\":{\"query_text\":\""
-                + question
-                + "\",\"model_id\":\""
-                + modelId
-                + "\",\"k\":"
-                + k
-                + "}}}"
-                + " }";
-
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            XContentParser queryParser = XContentType.JSON
-                .xContent()
-                .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, query);
-            searchSourceBuilder.parseXContent(queryParser);
-            searchSourceBuilder.fetchSource(sourceFields, null);
-            searchSourceBuilder.size(docSize);
-            SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder).indices(index);
-            ActionListener actionListener = ActionListener.<SearchResponse>wrap(r -> {
-                SearchHit[] hits = r.getHits().getHits();
-
-                if (hits != null && hits.length > 0) {
-                    StringBuilder contextBuilder = new StringBuilder();
-                    for (int i = 0; i < hits.length; i++) {
-                        SearchHit hit = hits[i];
-                        String doc = AccessController.doPrivileged((PrivilegedExceptionAction<String>) () -> {
-                            Map<String, Object> docContent = new HashMap<>();
-                            docContent.put("_id", hit.getId());
-                            docContent.put("_source", hit.getSourceAsMap());
-                            return gson.toJson(docContent);
-                        });
-                        contextBuilder.append(doc).append("\n");
-                    }
-                    listener.onResponse((T) gson.toJson(contextBuilder.toString()));
-                } else {
-                    listener.onResponse((T) "");
-                }
-            }, e -> {
-                log.error("Failed to search index", e);
-                listener.onFailure(e);
-            });
-            client.search(searchRequest, actionListener);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    protected String getQueryBody(String queryText) {
+        if (StringUtils.isBlank(embeddingField) || StringUtils.isBlank(modelId)) {
+            throw new IllegalArgumentException(
+                "Parameter [" + EMBEDDING_FIELD + "] and [" + MODEL_ID_FIELD + "] can not be null or empty."
+            );
         }
+        return "{\"query\":{\"neural\":{\""
+            + embeddingField
+            + "\":{\"query_text\":\""
+            + queryText
+            + "\",\"model_id\":\""
+            + modelId
+            + "\",\"k\":"
+            + k
+            + "}}}"
+            + " }";
     }
 
     @Override
     public String getType() {
         return TYPE;
-    }
-
-    @Override
-    public String getVersion() {
-        return null;
     }
 
     @Override
@@ -153,23 +86,7 @@ public class VectorDBTool implements Tool {
         this.name = s;
     }
 
-    @Override
-    public boolean validate(Map<String, String> parameters) {
-        if (parameters == null || parameters.size() == 0) {
-            return false;
-        }
-        String question = parameters.get("input");
-        return question != null;
-    }
-
-    public void setClient(Client client) {
-        this.client = client;
-    }
-
-    public static class Factory implements Tool.Factory<VectorDBTool> {
-        private Client client;
-        private NamedXContentRegistry xContentRegistry;
-
+    public static class Factory extends AbstractRetrieverTool.Factory<VectorDBTool> {
         private static Factory INSTANCE;
 
         public static Factory getInstance() {
@@ -185,18 +102,13 @@ public class VectorDBTool implements Tool {
             }
         }
 
-        public void init(Client client, NamedXContentRegistry xContentRegistry) {
-            this.client = client;
-            this.xContentRegistry = xContentRegistry;
-        }
-
         @Override
         public VectorDBTool create(Map<String, Object> params) {
-            String index = (String) params.get("index");
-            String embeddingField = (String) params.get("embedding_field");
-            String[] sourceFields = gson.fromJson((String) params.get("source_field"), String[].class);
-            String modelId = (String) params.get("model_id");
-            Integer docSize = params.containsKey("doc_size") ? Integer.parseInt((String) params.get("doc_size")) : 2;
+            String index = (String) params.get(INDEX_FIELD);
+            String embeddingField = (String) params.get(EMBEDDING_FIELD);
+            String[] sourceFields = gson.fromJson((String) params.get(SOURCE_FIELD), String[].class);
+            String modelId = (String) params.get(MODEL_ID_FIELD);
+            Integer docSize = params.containsKey(DOC_SIZE_FIELD) ? Integer.parseInt((String) params.get(DOC_SIZE_FIELD)) : 2;
             return VectorDBTool
                 .builder()
                 .client(client)

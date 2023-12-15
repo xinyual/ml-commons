@@ -24,5 +24,6 @@ public class InteractionActionTests extends OpenSearchTestCase {
         assert (CreateInteractionAction.INSTANCE instanceof CreateInteractionAction);
         assert (GetInteractionsAction.INSTANCE instanceof GetInteractionsAction);
         assert (SearchInteractionsAction.INSTANCE instanceof SearchInteractionsAction);
+        assert (GetInteractionAction.INSTANCE instanceof GetInteractionAction);
     }
 }

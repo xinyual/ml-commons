@@ -36,6 +36,8 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
+import org.opensearch.ml.action.agents.DeleteAgentTransportAction;
+import org.opensearch.ml.action.agents.GetAgentTransportAction;
 import org.opensearch.ml.action.agents.TransportRegisterAgentAction;
 import org.opensearch.ml.action.connector.DeleteConnectorTransportAction;
 import org.opensearch.ml.action.connector.GetConnectorTransportAction;
@@ -97,6 +99,8 @@ import org.opensearch.ml.common.spi.MLCommonsExtension;
 import org.opensearch.ml.common.spi.memory.Memory;
 import org.opensearch.ml.common.spi.tools.Tool;
 import org.opensearch.ml.common.spi.tools.ToolAnnotation;
+import org.opensearch.ml.common.transport.agent.MLAgentDeleteAction;
+import org.opensearch.ml.common.transport.agent.MLAgentGetAction;
 import org.opensearch.ml.common.transport.agent.MLRegisterAgentAction;
 import org.opensearch.ml.common.transport.connector.MLConnectorDeleteAction;
 import org.opensearch.ml.common.transport.connector.MLConnectorGetAction;
@@ -143,6 +147,7 @@ import org.opensearch.ml.engine.indices.MLIndicesHandler;
 import org.opensearch.ml.engine.indices.MLInputDatasetHandler;
 import org.opensearch.ml.engine.memory.ConversationIndexMemory;
 import org.opensearch.ml.engine.memory.MLMemoryManager;
+<<<<<<< HEAD
 import org.opensearch.ml.engine.tools.AgentTool;
 import org.opensearch.ml.engine.tools.CatIndexTool;
 import org.opensearch.ml.engine.tools.MLModelTool;
@@ -151,6 +156,7 @@ import org.opensearch.ml.engine.tools.PPLTool;
 import org.opensearch.ml.engine.tools.PainlessScriptTool;
 import org.opensearch.ml.engine.tools.VectorDBTool;
 import org.opensearch.ml.engine.tools.VisualizationsTool;
+import org.opensearch.ml.engine.tools.*;
 import org.opensearch.ml.helper.ConnectorAccessControlHelper;
 import org.opensearch.ml.helper.ModelAccessControlHelper;
 import org.opensearch.ml.memory.ConversationalMemoryHandler;
@@ -160,8 +166,12 @@ import org.opensearch.ml.memory.action.conversation.CreateInteractionAction;
 import org.opensearch.ml.memory.action.conversation.CreateInteractionTransportAction;
 import org.opensearch.ml.memory.action.conversation.DeleteConversationAction;
 import org.opensearch.ml.memory.action.conversation.DeleteConversationTransportAction;
+import org.opensearch.ml.memory.action.conversation.GetConversationAction;
+import org.opensearch.ml.memory.action.conversation.GetConversationTransportAction;
 import org.opensearch.ml.memory.action.conversation.GetConversationsAction;
 import org.opensearch.ml.memory.action.conversation.GetConversationsTransportAction;
+import org.opensearch.ml.memory.action.conversation.GetInteractionAction;
+import org.opensearch.ml.memory.action.conversation.GetInteractionTransportAction;
 import org.opensearch.ml.memory.action.conversation.GetInteractionsAction;
 import org.opensearch.ml.memory.action.conversation.GetInteractionsTransportAction;
 import org.opensearch.ml.memory.action.conversation.GetTracesAction;
@@ -180,12 +190,14 @@ import org.opensearch.ml.model.MLModelCacheHelper;
 import org.opensearch.ml.model.MLModelManager;
 import org.opensearch.ml.repackage.com.google.common.collect.ImmutableList;
 import org.opensearch.ml.rest.RestMLCreateConnectorAction;
+import org.opensearch.ml.rest.RestMLDeleteAgentAction;
 import org.opensearch.ml.rest.RestMLDeleteConnectorAction;
 import org.opensearch.ml.rest.RestMLDeleteModelAction;
 import org.opensearch.ml.rest.RestMLDeleteModelGroupAction;
 import org.opensearch.ml.rest.RestMLDeleteTaskAction;
 import org.opensearch.ml.rest.RestMLDeployModelAction;
 import org.opensearch.ml.rest.RestMLExecuteAction;
+import org.opensearch.ml.rest.RestMLGetAgentAction;
 import org.opensearch.ml.rest.RestMLGetConnectorAction;
 import org.opensearch.ml.rest.RestMLGetModelAction;
 import org.opensearch.ml.rest.RestMLGetTaskAction;
@@ -212,7 +224,9 @@ import org.opensearch.ml.rest.RestMLUploadModelChunkAction;
 import org.opensearch.ml.rest.RestMemoryCreateConversationAction;
 import org.opensearch.ml.rest.RestMemoryCreateInteractionAction;
 import org.opensearch.ml.rest.RestMemoryDeleteConversationAction;
+import org.opensearch.ml.rest.RestMemoryGetConversationAction;
 import org.opensearch.ml.rest.RestMemoryGetConversationsAction;
+import org.opensearch.ml.rest.RestMemoryGetInteractionAction;
 import org.opensearch.ml.rest.RestMemoryGetInteractionsAction;
 import org.opensearch.ml.rest.RestMemoryGetTracesAction;
 import org.opensearch.ml.rest.RestMemorySearchConversationsAction;
@@ -357,7 +371,11 @@ public class MachineLearningPlugin extends Plugin implements ActionPlugin, Searc
                 new ActionHandler<>(SearchConversationsAction.INSTANCE, SearchConversationsTransportAction.class),
                 new ActionHandler<>(UpdateConversationAction.INSTANCE, UpdateConversationTransportAction.class),
                 new ActionHandler<>(UpdateInteractionAction.INSTANCE, UpdateInteractionTransportAction.class),
-                new ActionHandler<>(GetTracesAction.INSTANCE, GetTracesTransportAction.class)
+                new ActionHandler<>(GetTracesAction.INSTANCE, GetTracesTransportAction.class),
+                new ActionHandler<>(MLAgentGetAction.INSTANCE, GetAgentTransportAction.class),
+                new ActionHandler<>(MLAgentDeleteAction.INSTANCE, DeleteAgentTransportAction.class),
+                new ActionHandler<>(GetConversationAction.INSTANCE, GetConversationTransportAction.class),
+                new ActionHandler<>(GetInteractionAction.INSTANCE, GetInteractionTransportAction.class)
             );
     }
 
@@ -502,19 +520,28 @@ public class MachineLearningPlugin extends Plugin implements ActionPlugin, Searc
         MLModelTool.Factory.getInstance().init(client);
         MathTool.Factory.getInstance().init(scriptService);
         VectorDBTool.Factory.getInstance().init(client, xContentRegistry);
+        NeuralSparseTool.Factory.getInstance().init(client, xContentRegistry);
         AgentTool.Factory.getInstance().init(client);
         CatIndexTool.Factory.getInstance().init(client, clusterService);
         PainlessScriptTool.Factory.getInstance().init(client, scriptService);
         PPLTool.Factory.getInstance().init(client);
         VisualizationsTool.Factory.getInstance().init(client);
+        RAGTool.Factory.getInstance().init(client, xContentRegistry);
+        SearchAlertsTool.Factory.getInstance().init(client);
+        IndexMappingTool.Factory.getInstance().init(client);
+
         toolFactories.put(MLModelTool.TYPE, MLModelTool.Factory.getInstance());
         toolFactories.put(MathTool.TYPE, MathTool.Factory.getInstance());
         toolFactories.put(VectorDBTool.TYPE, VectorDBTool.Factory.getInstance());
+        toolFactories.put(NeuralSparseTool.TYPE, NeuralSparseTool.Factory.getInstance());
         toolFactories.put(AgentTool.TYPE, AgentTool.Factory.getInstance());
         toolFactories.put(CatIndexTool.TYPE, CatIndexTool.Factory.getInstance());
         toolFactories.put(PainlessScriptTool.TYPE, PainlessScriptTool.Factory.getInstance());
         toolFactories.put(PPLTool.TYPE, PPLTool.Factory.getInstance());
         toolFactories.put(VisualizationsTool.TYPE, VisualizationsTool.Factory.getInstance());
+        toolFactories.put(SearchAlertsTool.TYPE, SearchAlertsTool.Factory.getInstance());
+        toolFactories.put(IndexMappingTool.NAME, IndexMappingTool.Factory.getInstance());
+        toolFactories.put(RAGTool.TYPE, RAGTool.Factory.getInstance());
 
         if (externalToolFactories != null) {
             toolFactories.putAll(externalToolFactories);
@@ -657,6 +684,10 @@ public class MachineLearningPlugin extends Plugin implements ActionPlugin, Searc
         RestMemoryUpdateConversationAction restMemoryUpdateConversationAction = new RestMemoryUpdateConversationAction();
         RestMemoryUpdateInteractionAction restMemoryUpdateInteractionAction = new RestMemoryUpdateInteractionAction();
         RestMemoryGetTracesAction restMemoryGetTracesAction = new RestMemoryGetTracesAction();
+        RestMLGetAgentAction restMLGetAgentAction = new RestMLGetAgentAction();
+        RestMLDeleteAgentAction restMLDeleteAgentAction = new RestMLDeleteAgentAction();
+        RestMemoryGetConversationAction restGetConversationAction = new RestMemoryGetConversationAction();
+        RestMemoryGetInteractionAction restGetInteractionAction = new RestMemoryGetInteractionAction();
         return ImmutableList
             .of(
                 restMLStatsAction,
@@ -698,7 +729,11 @@ public class MachineLearningPlugin extends Plugin implements ActionPlugin, Searc
                 restSearchInteractionsAction,
                 restMemoryUpdateConversationAction,
                 restMemoryUpdateInteractionAction,
-                restMemoryGetTracesAction
+                restMemoryGetTracesAction,
+                restMLGetAgentAction,
+                restMLDeleteAgentAction,
+                restGetConversationAction,
+                restGetInteractionAction
             );
     }
 

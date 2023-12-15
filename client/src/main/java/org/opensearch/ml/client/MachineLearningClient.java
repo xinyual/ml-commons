@@ -12,6 +12,7 @@ import org.opensearch.action.delete.DeleteResponse;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.support.PlainActionFuture;
+import org.opensearch.common.Nullable;
 import org.opensearch.common.action.ActionFuture;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.ml.common.MLModel;
@@ -28,6 +29,7 @@ import org.opensearch.ml.common.transport.model_group.MLRegisterModelGroupInput;
 import org.opensearch.ml.common.transport.model_group.MLRegisterModelGroupResponse;
 import org.opensearch.ml.common.transport.register.MLRegisterModelInput;
 import org.opensearch.ml.common.transport.register.MLRegisterModelResponse;
+import org.opensearch.ml.common.transport.undeploy.MLUndeployModelsResponse;
 
 /**
  * A client to provide interfaces for machine learning jobs. This will be used by other plugins.
@@ -255,7 +257,7 @@ public interface MachineLearningClient {
 
     /**
      * Deploy model
-     * For additional info on deploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/#deploying-a-model
+     * For additional info on deploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/model-apis/deploy-model/
      * @param modelId the model id
      */
     default ActionFuture<MLDeployModelResponse> deploy(String modelId) {
@@ -266,11 +268,32 @@ public interface MachineLearningClient {
 
     /**
      * Deploy model
-     * For additional info on deploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/#deploying-a-model
+     * For additional info on deploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/model-apis/deploy-model/
      * @param modelId the model id
      * @param listener a listener to be notified of the result
      */
     void deploy(String modelId, ActionListener<MLDeployModelResponse> listener);
+
+    /**
+     * Undeploy models
+     * For additional info on undeploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/model-apis/undeploy-model/
+     * @param modelIds the model ids
+     * @param nodeIds the node ids. May be null for all nodes.
+     */
+    default ActionFuture<MLUndeployModelsResponse> undeploy(String[] modelIds, @Nullable String[] nodeIds) {
+        PlainActionFuture<MLUndeployModelsResponse> actionFuture = PlainActionFuture.newFuture();
+        undeploy(modelIds, nodeIds, actionFuture);
+        return actionFuture;
+    }
+
+    /**
+     * Undeploy model
+     * For additional info on deploy, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/model-apis/undeploy-model/
+     * @param modelIds the model ids
+     * @param modelIds the node ids. May be null for all nodes.
+     * @param listener a listener to be notified of the result
+     */
+    void undeploy(String[] modelIds, String[] nodeIds, ActionListener<MLUndeployModelsResponse> listener);
 
     /**
      * Create connector for remote model
@@ -284,6 +307,19 @@ public interface MachineLearningClient {
     }
 
     void createConnector(MLCreateConnectorInput mlCreateConnectorInput, ActionListener<MLCreateConnectorResponse> listener);
+
+    /**
+     * Delete connector for remote model
+     * @param connectorId The id of the connector to delete
+     * @return the result future
+     */
+    default ActionFuture<DeleteResponse> deleteConnector(String connectorId) {
+        PlainActionFuture<DeleteResponse> actionFuture = PlainActionFuture.newFuture();
+        deleteConnector(connectorId, actionFuture);
+        return actionFuture;
+    }
+
+    void deleteConnector(String connectorId, ActionListener<DeleteResponse> listener);
 
     /**
      * Register model group
@@ -356,4 +392,17 @@ public interface MachineLearningClient {
      * @param mlAgent Register agent input, refer: https://opensearch.org/docs/latest/ml-commons-plugin/api/#register-agent
      */
     void registerAgent(MLAgent mlAgent, ActionListener<MLRegisterAgentResponse> listener);
+
+    /**
+     * Delete agent
+     * @param agentId The id of the agent to delete
+     * @return the result future
+     */
+    default ActionFuture<DeleteResponse> deleteAgent(String agentId) {
+        PlainActionFuture<DeleteResponse> actionFuture = PlainActionFuture.newFuture();
+        deleteAgent(agentId, actionFuture);
+        return actionFuture;
+    }
+
+    void deleteAgent(String agentId, ActionListener<DeleteResponse> listener);
 }

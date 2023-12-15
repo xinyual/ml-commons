@@ -49,6 +49,7 @@ import org.opensearch.ml.common.transport.model_group.MLRegisterModelGroupInput;
 import org.opensearch.ml.common.transport.model_group.MLRegisterModelGroupResponse;
 import org.opensearch.ml.common.transport.register.MLRegisterModelInput;
 import org.opensearch.ml.common.transport.register.MLRegisterModelResponse;
+import org.opensearch.ml.common.transport.undeploy.MLUndeployModelsResponse;
 
 public class MachineLearningClientTest {
 
@@ -77,6 +78,9 @@ public class MachineLearningClientTest {
 
     @Mock
     MLDeployModelResponse deployModelResponse;
+
+    @Mock
+    MLUndeployModelsResponse undeployModelsResponse;
 
     @Mock
     MLCreateConnectorResponse createConnectorResponse;
@@ -163,8 +167,18 @@ public class MachineLearningClientTest {
             }
 
             @Override
+            public void undeploy(String[] modelIds, String[] nodeIds, ActionListener<MLUndeployModelsResponse> listener) {
+                listener.onResponse(undeployModelsResponse);
+            }
+
+            @Override
             public void createConnector(MLCreateConnectorInput mlCreateConnectorInput, ActionListener<MLCreateConnectorResponse> listener) {
                 listener.onResponse(createConnectorResponse);
+            }
+
+            @Override
+            public void deleteConnector(String connectorId, ActionListener<DeleteResponse> listener) {
+                listener.onResponse(deleteResponse);
             }
 
             public void registerModelGroup(
@@ -187,6 +201,11 @@ public class MachineLearningClientTest {
             @Override
             public void registerAgent(MLAgent mlAgent, ActionListener<MLRegisterAgentResponse> listener) {
                 listener.onResponse(registerAgentResponse);
+            }
+
+            @Override
+            public void deleteAgent(String agentId, ActionListener<DeleteResponse> listener) {
+                listener.onResponse(deleteResponse);
             }
         };
     }
@@ -354,6 +373,11 @@ public class MachineLearningClientTest {
     }
 
     @Test
+    public void undeploy() {
+        assertEquals(undeployModelsResponse, machineLearningClient.undeploy(new String[] { "modelId" }, null).actionGet());
+    }
+
+    @Test
     public void createConnector() {
         Map<String, String> params = Map.ofEntries(Map.entry("endpoint", "endpoint"), Map.entry("temp", "7"));
         Map<String, String> credentials = Map.ofEntries(Map.entry("key1", "key1"), Map.entry("key2", "key2"));
@@ -377,8 +401,18 @@ public class MachineLearningClientTest {
     }
 
     @Test
+    public void deleteConnector() {
+        assertEquals(deleteResponse, machineLearningClient.deleteConnector("connectorId").actionGet());
+    }
+
+    @Test
     public void testRegisterAgent() {
         MLAgent mlAgent = MLAgent.builder().name("Agent name").build();
         assertEquals(registerAgentResponse, machineLearningClient.registerAgent(mlAgent).actionGet());
+    }
+
+    @Test
+    public void deleteAgent() {
+        assertEquals(deleteResponse, machineLearningClient.deleteAgent("agentId").actionGet());
     }
 }

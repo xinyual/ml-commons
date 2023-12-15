@@ -8,6 +8,7 @@ package org.opensearch.ml.engine.algorithms.agent;
 import static org.apache.commons.text.StringEscapeUtils.escapeJson;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
+import java.io.IOException;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
@@ -15,21 +16,28 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.text.StringSubstitutor;
 import org.opensearch.action.StepListener;
+import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.ml.common.agent.MLAgent;
+import org.opensearch.ml.common.agent.MLMemorySpec;
 import org.opensearch.ml.common.agent.MLToolSpec;
+import org.opensearch.ml.common.conversation.ActionConstants;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.ml.common.spi.memory.Memory;
 import org.opensearch.ml.common.spi.tools.Tool;
+import org.opensearch.ml.engine.memory.ConversationIndexMemory;
+import org.opensearch.ml.repackage.com.google.common.collect.ImmutableMap;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -70,10 +78,15 @@ public class MLFlowAgentRunner {
         List<ModelTensor> flowAgentOutput = new ArrayList<>();
         Map<String, String> firstToolExecuteParams = null;
         StepListener<Object> previousStepListener = null;
+        Map<String, Object> additionalInfo = new ConcurrentHashMap<>();
         if (toolSpecs.size() == 0) {
             listener.onFailure(new IllegalArgumentException("no tool configured"));
             return;
         }
+
+        MLMemorySpec memorySpec = mlAgent.getMemory();
+        String memoryId = params.get(MLAgentExecutor.MEMORY_ID);
+        String parentInteractionId = params.get(MLAgentExecutor.PARENT_INTERACTION_ID);
 
         for (int i = 0; i <= toolSpecs.size(); i++) {
             if (i == 0) {
@@ -106,21 +119,12 @@ public class MLFlowAgentRunner {
                         }
                     }
 
-                    if (output instanceof List && !((List) output).isEmpty() && ((List) output).get(0) instanceof ModelTensors) {
-                        ModelTensors tensors = (ModelTensors) ((List) output).get(0);
-                        Object response = tensors.getMlModelTensors().get(0).getDataAsMap().get("response");
-                        params.put(outputKey, response + "");
-                    } else if (output instanceof ModelTensor) {
-                        params.put(outputKey, escapeJson(toJson(((ModelTensor) output).getDataAsMap())));
-                    } else {
-                        if (output instanceof String) {
-                            params.put(outputKey, (String) output);
-                        } else {
-                            params.put(outputKey, escapeJson(toJson(output.toString())));
-                        }
-                    }
+                    String outputResponse = parseResponse(output);
+                    params.put(outputKey, escapeJson(outputResponse));
+                    additionalInfo.put(outputKey, outputResponse);
 
                     if (finalI == toolSpecs.size()) {
+                        updateMemory(additionalInfo, memorySpec, memoryId, parentInteractionId);
                         listener.onResponse(flowAgentOutput);
                         return;
                     }
@@ -142,6 +146,46 @@ public class MLFlowAgentRunner {
             firstTool.run(firstToolExecuteParams, listener);
         } else {
             firstTool.run(firstToolExecuteParams, firstStepListener);
+        }
+    }
+
+    private void updateMemory(Map<String, Object> additionalInfo, MLMemorySpec memorySpec, String memoryId, String interactionId) {
+        if (memoryId == null || interactionId == null || memorySpec == null || memorySpec.getType() == null) {
+            return;
+        }
+        ConversationIndexMemory.Factory conversationIndexMemoryFactory = (ConversationIndexMemory.Factory) memoryFactoryMap
+            .get(memorySpec.getType());
+        conversationIndexMemoryFactory.create(memoryId, ActionListener.<ConversationIndexMemory>wrap(memory -> {
+            updateInteraction(additionalInfo, interactionId, memory);
+        }, e -> { log.error("Failed create memory from id: " + memoryId, e); }));
+    }
+
+    private void updateInteraction(Map<String, Object> additionalInfo, String interactionId, ConversationIndexMemory memory) {
+        memory
+            .getMemoryManager()
+            .updateInteraction(
+                interactionId,
+                ImmutableMap.of(ActionConstants.ADDITIONAL_INFO_FIELD, additionalInfo),
+                ActionListener.<UpdateResponse>wrap(updateResponse -> {
+                    log.info("Updated additional info for interaction ID: " + interactionId);
+                }, e -> { log.error("Failed to update root interaction", e); })
+            );
+    }
+
+    private String parseResponse(Object output) throws IOException {
+        if (output instanceof List && !((List) output).isEmpty() && ((List) output).get(0) instanceof ModelTensors) {
+            ModelTensors tensors = (ModelTensors) ((List) output).get(0);
+            return tensors.toXContent(JsonXContent.contentBuilder(), null).toString();
+        } else if (output instanceof ModelTensor) {
+            return ((ModelTensor) output).toXContent(JsonXContent.contentBuilder(), null).toString();
+        } else if (output instanceof ModelTensorOutput) {
+            return ((ModelTensorOutput) output).toXContent(JsonXContent.contentBuilder(), null).toString();
+        } else {
+            if (output instanceof String) {
+                return (String) output;
+            } else {
+                return toJson(output);
+            }
         }
     }
 

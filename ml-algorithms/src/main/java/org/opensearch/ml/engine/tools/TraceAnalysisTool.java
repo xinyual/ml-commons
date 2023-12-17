@@ -8,19 +8,21 @@ package org.opensearch.ml.engine.tools;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Client;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.ml.common.spi.tools.Tool;
 import org.opensearch.ml.common.spi.tools.ToolAnnotation;
 import org.opensearch.ml.repackage.com.google.common.collect.ImmutableSet;
 import org.opensearch.search.builder.SearchSourceBuilder;
-import software.amazon.awssdk.annotations.Immutable;
+import org.opensearch.search.sort.FieldSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortOrder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +33,9 @@ import java.util.function.Consumer;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
 @Log4j2
-@ToolAnnotation(TraceAnaylsisTool.TYPE)
-public class TraceAnaylsisTool implements Tool {
-    public static final String TYPE = "TraceAnaylsisTool";
+@ToolAnnotation(TraceAnalysisTool.TYPE)
+public class TraceAnalysisTool implements Tool {
+    public static final String TYPE = "TraceAnalysisTool";
 
     public static final String RANGE_START_KEY = "start";
 
@@ -50,7 +52,7 @@ public class TraceAnaylsisTool implements Tool {
     public static final String SORT_KEY = "sort";
 
 
-    public static final Set<String> LOGIC_KEY_SET = ImmutableSet.of("or_filter", "and_filter", "not_filter");
+    public static final Set<String> LOGIC_KEY_SET = ImmutableSet.of("or_filters", "and_filters", "not_filters");
     private Client client;
 
     private static final String DEFAULT_DESCRIPTION = "Use this tool to generate PPL and execute.";
@@ -68,7 +70,7 @@ public class TraceAnaylsisTool implements Tool {
 
     private String contextPrompt;
 
-    public TraceAnaylsisTool(Client client, String modelId, String contextPrompt) {
+    public TraceAnalysisTool(Client client, String modelId, String contextPrompt) {
         this.client = client;
         this.modelId = modelId;
         this.contextPrompt = contextPrompt;
@@ -77,25 +79,34 @@ public class TraceAnaylsisTool implements Tool {
     @Override
     public <T> void run(Map<String, String> parameters, ActionListener<T> listener) {
         Map<String, Object> returnParameters = gson.fromJson(parameters.get("input"), Map.class);
+        String indexName = parameters.get("indexName");
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
         // add must
-        if (parameters.containsKey(RANGE_KEY)){
+        if (returnParameters.containsKey(RANGE_KEY)){
             boolQueryBuilder.must(buildRange((Map<String, Object>) returnParameters.get(RANGE_KEY)));
         }
 
 
-        if (parameters.containsKey(TARGET_FILED))
+        if (returnParameters.containsKey(TARGET_FILED))
         {
             boolQueryBuilder.must(QueryBuilders.matchQuery((String) returnParameters.get(TARGET_FILED), returnParameters.get(TARGET_VALUE)));
         }
         // add other logic
 
-        addOtherLogic(returnParameters, boolQueryBuilder);
-
+        boolQueryBuilder = addOtherLogic(returnParameters, boolQueryBuilder);
+        searchSourceBuilder.query(boolQueryBuilder);
         //add sort
-        if (parameters.containsKey(SORT_KEY))
-        {}
-
+        if (returnParameters.containsKey(SORT_KEY))
+        {
+            searchSourceBuilder = addSort((Map<String, String>) returnParameters.get(SORT_KEY), searchSourceBuilder);
+        }
+        SearchRequest searchRequest = new SearchRequest(new String[]{indexName}, searchSourceBuilder);
+        client.search(searchRequest, ActionListener.<SearchResponse>wrap(searchResponse -> {
+            listener.onResponse((T) searchResponse);
+        }, e -> {
+            log.info(e);
+        }));
     }
 
 
@@ -119,19 +130,19 @@ public class TraceAnaylsisTool implements Tool {
         return true;
     }
 
-    public static class Factory implements Tool.Factory<TraceAnaylsisTool> {
+    public static class Factory implements Tool.Factory<TraceAnalysisTool> {
         private Client client;
 
-        private static TraceAnaylsisTool.Factory INSTANCE;
-        public static TraceAnaylsisTool.Factory getInstance() {
+        private static TraceAnalysisTool.Factory INSTANCE;
+        public static TraceAnalysisTool.Factory getInstance() {
             if (INSTANCE != null) {
                 return INSTANCE;
             }
-            synchronized (TraceAnaylsisTool.class) {
+            synchronized (TraceAnalysisTool.class) {
                 if (INSTANCE != null) {
                     return INSTANCE;
                 }
-                INSTANCE = new TraceAnaylsisTool.Factory();
+                INSTANCE = new TraceAnalysisTool.Factory();
                 return INSTANCE;
             }
         }
@@ -141,8 +152,8 @@ public class TraceAnaylsisTool implements Tool {
         }
 
         @Override
-        public TraceAnaylsisTool create(Map<String, Object> map) {
-            return new TraceAnaylsisTool(client, (String)map.get("model_id"), (String)map.get("prompt"));
+        public TraceAnalysisTool create(Map<String, Object> map) {
+            return new TraceAnalysisTool(client, (String)map.get("model_id"), (String)map.get("prompt"));
         }
 
         @Override
@@ -151,11 +162,6 @@ public class TraceAnaylsisTool implements Tool {
         }
     }
 
-    private MatchQueryBuilder buildMatch(Map<String, Object> parameters)
-    {
-        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery("serviceName", parameters.get(ENTITY_KEY));
-        return matchQueryBuilder;
-    }
 
     private RangeQueryBuilder buildRange(Map<String, Object> rangeParameters)
     {
@@ -186,11 +192,11 @@ public class TraceAnaylsisTool implements Tool {
         }
         return logicQueryBuilderList;
     }
-    private void addOtherLogic(Map<String, Object> parameters, BoolQueryBuilder boolQueryBuilder){
+    private BoolQueryBuilder addOtherLogic(Map<String, Object> parameters, BoolQueryBuilder boolQueryBuilder){
         Map<String, Consumer<QueryBuilder>> actions = Map.of(
-                "and_filter", boolQueryBuilder::filter,
-                "or_filter", boolQueryBuilder::should,
-                "not_filter", boolQueryBuilder::mustNot
+                "and_filters", boolQueryBuilder::filter,
+                "or_filters", boolQueryBuilder::should,
+                "not_filters", boolQueryBuilder::mustNot
         );
         for (String logicKey: LOGIC_KEY_SET)
         {
@@ -204,6 +210,18 @@ public class TraceAnaylsisTool implements Tool {
 
             }
         }
+        return boolQueryBuilder;
+    }
+
+    private SearchSourceBuilder addSort(Map<String, String> parameters, SearchSourceBuilder searchSourceBuilder)
+    {
+        for (Map.Entry<String, String> iterator: parameters.entrySet())
+        {
+            SortBuilder sortBuilder = new FieldSortBuilder(iterator.getKey());
+            sortBuilder.order(SortOrder.fromString(iterator.getValue()));
+            searchSourceBuilder.sort(sortBuilder);
+        }
+        return searchSourceBuilder;
     }
 
 }

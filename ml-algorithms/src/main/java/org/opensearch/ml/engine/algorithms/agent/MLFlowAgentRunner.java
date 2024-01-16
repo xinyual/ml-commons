@@ -130,6 +130,15 @@ public class MLFlowAgentRunner implements MLAgentRunner {
                     }
 
                     MLToolSpec toolSpec = toolSpecs.get(finalI);
+                    //If we set receive key for next tool, need to modify name
+                    if (toolSpec.getParameters().containsKey(MLAgent.NEXT_TOOL_RECEIVE_KEY)) {
+                        String nextReceiveKey = toolSpec.getParameters().get(MLAgent.NEXT_TOOL_RECEIVE_KEY);
+                        params.remove(outputKey);
+                        additionalInfo.remove(outputKey);
+                        params.put(nextReceiveKey, escapeJson(outputResponse));
+                        additionalInfo.put(nextReceiveKey, outputResponse);
+                    }
+
                     Tool tool = createTool(toolSpec);
                     if (finalI < toolSpecs.size()) {
                         tool.run(getToolExecuteParams(toolSpec, params), nextStepListener);

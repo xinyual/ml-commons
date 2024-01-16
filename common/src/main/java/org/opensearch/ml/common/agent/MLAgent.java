@@ -41,6 +41,7 @@ public class MLAgent implements ToXContentObject, Writeable {
     public static final String CREATED_TIME_FIELD = "created_time";
     public static final String LAST_UPDATED_TIME_FIELD = "last_updated_time";
     public static final String APP_TYPE_FIELD = "app_type";
+    public static final String NEXT_TOOL_RECEIVE_KEY = "receive_key";
 
     private String name;
     private String type;

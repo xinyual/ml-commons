@@ -134,7 +134,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
                                 .build()
                         );
                 }
-
+                log.info("history message");
+                log.info(messageList);
                 StringBuilder chatHistoryBuilder = new StringBuilder();
                 if (messageList.size() > 0) {
                     chatHistoryBuilder.append("Below is Chat History between Human and AI which sorted by time with asc order:\n");
@@ -223,6 +224,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
         }
 
         String prompt = parameters.get(PROMPT);
+        log.info("line 227");
+        log.info(prompt);
         if (prompt == null) {
             prompt = PromptTemplate.PROMPT_TEMPLATE;
         }
@@ -239,10 +242,13 @@ public class MLChatAgentRunner implements MLAgentRunner {
         }
         String promptToolResponse = parameters.getOrDefault("prompt.tool_response", PromptTemplate.PROMPT_TEMPLATE_TOOL_RESPONSE);
         tmpParameters.put("prompt.tool_response", promptToolResponse);
-
+        log.info("line 245");
+        log.info(tmpParameters);
         StringSubstitutor promptSubstitutor = new StringSubstitutor(tmpParameters, "${parameters.", "}");
         prompt = promptSubstitutor.replace(prompt);
 
+        log.info("line 249");
+        log.info(prompt);
         final List<String> inputTools = new ArrayList<>();
         for (Map.Entry<String, Tool> entry : tools.entrySet()) {
             String toolName = Optional.ofNullable(entry.getValue().getName()).orElse(entry.getValue().getType());
@@ -255,6 +261,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
         prompt = AgentUtils.addExamplesToPrompt(parameters, prompt);
         prompt = AgentUtils.addChatHistoryToPrompt(parameters, prompt);
         prompt = AgentUtils.addContextToPrompt(parameters, prompt);
+        log.info("line 264");
+        log.info(prompt);
 
         tmpParameters.put(PROMPT, prompt);
 
@@ -304,6 +312,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
         int maxIterations = Integer.parseInt(maxIteration) * 2;
 
         String finalPrompt = prompt;
+        log.info("in this round");
+        log.info(finalPrompt);
 
         firstListener = new StepListener<MLTaskResponse>();
         lastLlmListener.set(firstListener);
@@ -325,7 +335,7 @@ public class MLChatAgentRunner implements MLAgentRunner {
                     }
                     String thought = String.valueOf(dataAsMap.get("thought"));
                     String action = String.valueOf(dataAsMap.get("action"));
-                    String actionInput = String.valueOf(dataAsMap.get("action_input"));
+                    String actionInput = gson.toJson(dataAsMap.get("action_input"));
                     String finalAnswer = (String) dataAsMap.get("final_answer");
                     if (!dataAsMap.containsKey("thought")) {
                         String response = (String) dataAsMap.get("response");

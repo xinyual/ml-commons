@@ -224,8 +224,6 @@ public class MLChatAgentRunner implements MLAgentRunner {
         }
 
         String prompt = parameters.get(PROMPT);
-        log.info("line 227");
-        log.info(prompt);
         if (prompt == null) {
             prompt = PromptTemplate.PROMPT_TEMPLATE;
         }
@@ -242,13 +240,9 @@ public class MLChatAgentRunner implements MLAgentRunner {
         }
         String promptToolResponse = parameters.getOrDefault("prompt.tool_response", PromptTemplate.PROMPT_TEMPLATE_TOOL_RESPONSE);
         tmpParameters.put("prompt.tool_response", promptToolResponse);
-        log.info("line 245");
-        log.info(tmpParameters);
         StringSubstitutor promptSubstitutor = new StringSubstitutor(tmpParameters, "${parameters.", "}");
         prompt = promptSubstitutor.replace(prompt);
 
-        log.info("line 249");
-        log.info(prompt);
         final List<String> inputTools = new ArrayList<>();
         for (Map.Entry<String, Tool> entry : tools.entrySet()) {
             String toolName = Optional.ofNullable(entry.getValue().getName()).orElse(entry.getValue().getType());
@@ -261,8 +255,6 @@ public class MLChatAgentRunner implements MLAgentRunner {
         prompt = AgentUtils.addExamplesToPrompt(parameters, prompt);
         prompt = AgentUtils.addChatHistoryToPrompt(parameters, prompt);
         prompt = AgentUtils.addContextToPrompt(parameters, prompt);
-        log.info("line 264");
-        log.info(prompt);
 
         tmpParameters.put(PROMPT, prompt);
 
@@ -312,8 +304,6 @@ public class MLChatAgentRunner implements MLAgentRunner {
         int maxIterations = Integer.parseInt(maxIteration) * 2;
 
         String finalPrompt = prompt;
-        log.info("in this round");
-        log.info(finalPrompt);
 
         firstListener = new StepListener<MLTaskResponse>();
         lastLlmListener.set(firstListener);
@@ -337,6 +327,11 @@ public class MLChatAgentRunner implements MLAgentRunner {
                     String action = String.valueOf(dataAsMap.get("action"));
                     String actionInput = gson.toJson(dataAsMap.get("action_input"));
                     String finalAnswer = (String) dataAsMap.get("final_answer");
+                    log.info("info");
+                    log.info(thought);
+                    log.info(action);
+                    log.info(actionInput);
+                    log.info(finalAnswer);
                     if (!dataAsMap.containsKey("thought")) {
                         String response = (String) dataAsMap.get("response");
                         Pattern pattern = Pattern.compile("```json(.*?)```", Pattern.DOTALL);
@@ -605,7 +600,6 @@ public class MLChatAgentRunner implements MLAgentRunner {
                                 )
                                 .build()
                         );
-
                     ActionRequest request = new MLPredictionTaskRequest(
                         llm.getModelId(),
                         RemoteInferenceMLInput
@@ -614,6 +608,11 @@ public class MLChatAgentRunner implements MLAgentRunner {
                             .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
                             .build()
                     );
+                    log.info("in line 611");
+                    log.info(request);
+                    MLPredictionTaskRequest output1 = (MLPredictionTaskRequest) request;
+                    RemoteInferenceInputDataSet dataSet1 = (RemoteInferenceInputDataSet)output1.getMlInput().getInputDataset();
+                    log.info(dataSet1.getParameters());
                     client.execute(MLPredictionTaskAction.INSTANCE, request, (ActionListener<MLTaskResponse>) nextStepListener);
                     if (finalI == maxIterations - 1) {
                         if (verbose) {
@@ -639,7 +638,21 @@ public class MLChatAgentRunner implements MLAgentRunner {
                             listener.onResponse(ModelTensorOutput.builder().mlModelOutputs(finalModelTensors).build());
                         }
                     } else {
-                        client.execute(MLPredictionTaskAction.INSTANCE, request, (ActionListener<MLTaskResponse>) nextStepListener);
+                        Thread.sleep(1500);
+                        log.info("in line 648");
+                        log.info(request);
+                        MLPredictionTaskRequest output2 = (MLPredictionTaskRequest) request;
+                        RemoteInferenceInputDataSet dataSet2 = (RemoteInferenceInputDataSet)output2.getMlInput().getInputDataset();
+                        log.info(dataSet2.getParameters());
+                        ActionRequest request2 = new MLPredictionTaskRequest(
+                                llm.getModelId(),
+                                RemoteInferenceMLInput
+                                        .builder()
+                                        .algorithm(FunctionName.REMOTE)
+                                        .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
+                                        .build()
+                        );
+                        client.execute(MLPredictionTaskAction.INSTANCE, request2, (ActionListener<MLTaskResponse>) nextStepListener);
                     }
                 }
             }, e -> {
@@ -659,6 +672,8 @@ public class MLChatAgentRunner implements MLAgentRunner {
                 .inputDataset(RemoteInferenceInputDataSet.builder().parameters(tmpParameters).build())
                 .build()
         );
+        log.info("in line 669");
+        log.info(request);
         client.execute(MLPredictionTaskAction.INSTANCE, request, firstListener);
     }
 

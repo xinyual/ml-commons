@@ -19,6 +19,7 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.exception.MLValidationException;
 import org.opensearch.ml.common.transport.MLTaskResponse;
 import org.opensearch.ml.common.transport.prediction.MLPredictionTaskAction;
@@ -171,6 +172,10 @@ public class TransportPredictionTaskAction extends HandledTransportAction<Action
         // For remote text embedding model, neural search will set mlPredictionTaskRequest.getMlInput().getAlgorithm() as
         // TEXT_EMBEDDING. In ml-commons we should always use the real function name of model: REMOTE. So we try to get
         // from model cache first.
+        log.info("in line 174");
+        RemoteInferenceInputDataSet demo = (RemoteInferenceInputDataSet) mlPredictionTaskRequest.getMlInput().getInputDataset();
+
+        log.info(demo.getParameters().get("prompt"));
         FunctionName functionName = modelCacheHelper
             .getOptionalFunctionName(modelId)
             .orElse(mlPredictionTaskRequest.getMlInput().getAlgorithm());

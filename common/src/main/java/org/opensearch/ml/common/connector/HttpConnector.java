@@ -291,11 +291,6 @@ public class HttpConnector extends AbstractConnector {
             payload = substitutor.replace(payload);
             log.info("to LLM");
             log.info(payload);
-            String payloadString = (String) payload;
-            if (payloadString.startsWith("\n\nHuman:"))
-            {
-                log.info("success prefix");
-            }
             if (!isJson(payload)) {
                 throw new IllegalArgumentException("Invalid JSON in payload");
             }

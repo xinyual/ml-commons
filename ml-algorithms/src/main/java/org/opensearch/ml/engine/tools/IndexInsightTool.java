@@ -99,7 +99,7 @@ public class IndexInsightTool implements Tool {
 
     @Override
     public boolean validate(Map<String, String> parameters) {
-        return false;
+        return true;
     }
 
     public static class Factory implements Tool.Factory<IndexInsightTool> {

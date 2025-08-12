@@ -28,8 +28,10 @@ import org.opensearch.ml.common.transport.prediction.MLPredictionTaskRequest;
 import org.opensearch.ml.common.utils.ToolUtils;
 import org.opensearch.transport.client.Client;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.opensearch.ml.common.CommonValue.TENANT_ID_FIELD;
 
@@ -45,8 +47,13 @@ public class IndexInsightTool implements Tool {
     @Setter
     private Client client;
 
-    public IndexInsightTool(Client client) {
+    public IndexInsightTool(Client client, Map<String, Object> attributes) {
         this.client = client;
+        if (Objects.isNull(attributes)) {
+            this.attributes = new HashMap<>();
+        }  else {
+            this.attributes = attributes;
+        }
     }
 
     private static String DEFAULT_DESCRIPTION = "demo";
@@ -141,7 +148,7 @@ public class IndexInsightTool implements Tool {
         @Override
         public IndexInsightTool create(Map<String, Object> map) {
             return new IndexInsightTool(
-                    client
+                    client, Map.of()
             );
         }
 

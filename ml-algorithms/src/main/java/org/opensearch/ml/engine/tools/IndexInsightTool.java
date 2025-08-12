@@ -44,16 +44,15 @@ public class IndexInsightTool implements Tool {
     @Setter
     private Map<String, Object> attributes;
 
+    @Getter
+    @Setter
+    private String description = DEFAULT_DESCRIPTION;
+
     @Setter
     private Client client;
 
-    public IndexInsightTool(Client client, Map<String, Object> attributes) {
+    public IndexInsightTool(Client client) {
         this.client = client;
-        if (Objects.isNull(attributes)) {
-            this.attributes = new HashMap<>();
-        }  else {
-            this.attributes = attributes;
-        }
     }
 
     private static String DEFAULT_DESCRIPTION = "demo";
@@ -99,26 +98,6 @@ public class IndexInsightTool implements Tool {
     }
 
     @Override
-    public String getDescription() {
-        return "";
-    }
-
-    @Override
-    public Map<String, Object> getAttributes() {
-        return Map.of();
-    }
-
-    @Override
-    public void setAttributes(Map<String, Object> attributes) {
-
-    }
-
-    @Override
-    public void setDescription(String description) {
-
-    }
-
-    @Override
     public boolean validate(Map<String, String> parameters) {
         return false;
     }
@@ -148,7 +127,7 @@ public class IndexInsightTool implements Tool {
         @Override
         public IndexInsightTool create(Map<String, Object> map) {
             return new IndexInsightTool(
-                    client, Map.of()
+                    client
             );
         }
 

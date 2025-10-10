@@ -52,7 +52,10 @@ public class FieldDescriptionTask extends AbstractIndexInsightTask {
                     client,
                     tenantId,
                     ActionListener
-                        .wrap(agentId -> { batchProcessFields(statisticalContentMap, agentId, tenantId, listener); }, listener::onFailure)
+                        .wrap(
+                            agentId -> { batchProcessFields(statisticalContentMap, agentId, tenantId, listener); },
+                            e -> handleError("Failed to get LLM agent from ML config index {}", e, tenantId, listener)
+                        )
                 );
             }, e -> handleError("Failed to get statistical content for index {}", e, tenantId, listener)));
         } catch (Exception e) {

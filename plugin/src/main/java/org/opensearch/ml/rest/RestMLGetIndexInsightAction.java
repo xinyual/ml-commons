@@ -6,11 +6,11 @@
 package org.opensearch.ml.rest;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.ml.common.CommonValue.PARAMETER_ROLE_ID;
 import static org.opensearch.ml.common.indexInsight.MLIndexInsightType.STATISTICAL_DATA;
 import static org.opensearch.ml.plugin.MachineLearningPlugin.ML_BASE_URI;
 import static org.opensearch.ml.utils.MLExceptionUtils.AGENT_FRAMEWORK_DISABLED_ERR_MSG;
 import static org.opensearch.ml.utils.RestActionUtils.PARAMETER_INDEX_ID;
-import static org.opensearch.ml.utils.RestActionUtils.PARAMETER_ROLE_ID;
 import static org.opensearch.ml.utils.RestActionUtils.getParameterId;
 import static org.opensearch.ml.utils.TenantAwareHelper.getTenantID;
 

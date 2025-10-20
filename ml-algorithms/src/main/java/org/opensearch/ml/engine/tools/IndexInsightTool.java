@@ -5,6 +5,8 @@
 
 package org.opensearch.ml.engine.tools;
 
+import static org.opensearch.ml.common.CommonValue.PARAMETER_ROLE_ID;
+import static org.opensearch.ml.common.CommonValue.TENANT_ID_FIELD;
 import static org.opensearch.ml.common.CommonValue.TOOL_INPUT_SCHEMA_FIELD;
 
 import java.util.Map;
@@ -76,7 +78,12 @@ public class IndexInsightTool implements Tool {
             Map<String, String> parameters = ToolUtils.extractInputParameters(originalParameters, attributes);
             String indexName = parameters.get("indexName");
             MLIndexInsightType taskType = MLIndexInsightType.fromString(parameters.get("taskType"));
-            MLIndexInsightGetRequest mlIndexInsightGetRequest = new MLIndexInsightGetRequest(indexName, null, taskType, null);
+            MLIndexInsightGetRequest mlIndexInsightGetRequest = new MLIndexInsightGetRequest(
+                indexName,
+                parameters.getOrDefault(PARAMETER_ROLE_ID, null),
+                taskType,
+                parameters.getOrDefault(TENANT_ID_FIELD, null)
+            );
             client.execute(MLIndexInsightGetAction.INSTANCE, mlIndexInsightGetRequest, ActionListener.wrap(r -> {
                 IndexInsight indexInsight = r.getIndexInsight();
                 listener.onResponse((T) indexInsight.toString());

@@ -68,7 +68,6 @@ public class RestActionUtils {
     public static final String PARAMETER_TASK_ID = "task_id";
     public static final String PARAMETER_CONNECTOR_ID = "connector_id";
     public static final String PARAMETER_INDEX_ID = "index_id";
-    public static final String PARAMETER_ROLE_ID = "cmk_role";
     public static final String PARAMETER_DEPLOY_MODEL = "deploy";
     public static final String PARAMETER_VERSION = "version";
     public static final String PARAMETER_MODEL_GROUP_ID = "model_group_id";

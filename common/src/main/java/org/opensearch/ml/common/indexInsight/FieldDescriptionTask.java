@@ -40,8 +40,8 @@ public class FieldDescriptionTask extends AbstractIndexInsightTask {
 
     private static final int BATCH_SIZE = 50; // Hard-coded value for now
 
-    public FieldDescriptionTask(String sourceIndex, Client client, SdkClient sdkClient) {
-        super(MLIndexInsightType.FIELD_DESCRIPTION, sourceIndex, client, sdkClient);
+    public FieldDescriptionTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn) {
+        super(MLIndexInsightType.FIELD_DESCRIPTION, sourceIndex, client, sdkClient, cmkRoleArn);
     }
 
     @Override
@@ -329,7 +329,7 @@ public class FieldDescriptionTask extends AbstractIndexInsightTask {
     @Override
     public IndexInsightTask createPrerequisiteTask(MLIndexInsightType prerequisiteType) {
         if (prerequisiteType == MLIndexInsightType.STATISTICAL_DATA) {
-            return new StatisticalDataTask(sourceIndex, client, sdkClient);
+            return new StatisticalDataTask(sourceIndex, client, sdkClient, cmkRoleArn);
         }
         throw new IllegalStateException("Unsupported prerequisite type: " + prerequisiteType);
     }

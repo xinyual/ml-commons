@@ -45,6 +45,8 @@ buildscript {
         configurations.all {
             resolutionStrategy {
                 force("org.eclipse.platform:org.eclipse.core.runtime:3.29.0") // for spotless transitive dependency CVE (for 3.26.100)
+                force("software.amazon.awssdk:kms:2.23.29")
+                force("org.dafny:DafnyRuntime:4.9.0")
             }
         }
     }
@@ -55,6 +57,8 @@ buildscript {
                 //in order to handle jackson's higher release version in shadow, this needs to be upgraded to latest
                 force(group: "org.ow2.asm", name: "asm", version: asm_version)
                 force(group: "org.ow2.asm", name: "asm-commons", version: asm_version)
+                force("software.amazon.awssdk:kms:2.26.3") // for spotless transitive dependency CVE (for 3.26.100)
+                force("org.dafny:DafnyRuntime:4.1.0")
             }
         }
     }

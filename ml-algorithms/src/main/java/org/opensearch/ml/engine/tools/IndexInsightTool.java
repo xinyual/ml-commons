@@ -76,7 +76,7 @@ public class IndexInsightTool implements Tool {
             Map<String, String> parameters = ToolUtils.extractInputParameters(originalParameters, attributes);
             String indexName = parameters.get("indexName");
             MLIndexInsightType taskType = MLIndexInsightType.fromString(parameters.get("taskType"));
-            MLIndexInsightGetRequest mlIndexInsightGetRequest = new MLIndexInsightGetRequest(indexName, taskType, null);
+            MLIndexInsightGetRequest mlIndexInsightGetRequest = new MLIndexInsightGetRequest(indexName, null, taskType, null);
             client.execute(MLIndexInsightGetAction.INSTANCE, mlIndexInsightGetRequest, ActionListener.wrap(r -> {
                 IndexInsight indexInsight = r.getIndexInsight();
                 listener.onResponse((T) indexInsight.toString());

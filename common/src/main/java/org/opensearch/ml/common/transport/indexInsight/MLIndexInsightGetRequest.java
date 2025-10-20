@@ -27,11 +27,13 @@ import lombok.Getter;
 @Getter
 public class MLIndexInsightGetRequest extends ActionRequest {
     String indexName;
+    String cmkRoleArn;
     MLIndexInsightType targetIndexInsight;
     String tenantId;
 
-    public MLIndexInsightGetRequest(String indexName, MLIndexInsightType targetIndexInsight, String tenantId) {
+    public MLIndexInsightGetRequest(String indexName, String cmkRoleArn, MLIndexInsightType targetIndexInsight, String tenantId) {
         this.indexName = indexName;
+        this.cmkRoleArn = cmkRoleArn;
         this.targetIndexInsight = targetIndexInsight;
         this.tenantId = tenantId;
     }
@@ -39,6 +41,7 @@ public class MLIndexInsightGetRequest extends ActionRequest {
     public MLIndexInsightGetRequest(StreamInput in) throws IOException {
         super(in);
         this.indexName = in.readString();
+        this.cmkRoleArn = in.readOptionalString();
         this.targetIndexInsight = MLIndexInsightType.fromString(in.readString());
         this.tenantId = in.readOptionalString();
     }
@@ -47,6 +50,7 @@ public class MLIndexInsightGetRequest extends ActionRequest {
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeString(this.indexName);
+        out.writeOptionalString(this.cmkRoleArn);
         out.writeString(this.targetIndexInsight.name());
         out.writeOptionalString(tenantId);
     }

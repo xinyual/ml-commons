@@ -54,7 +54,12 @@ dependencies {
     // Multi-tenant SDK Client
     implementation "org.opensearch:opensearch-remote-metadata-sdk:${opensearch_build}"
     implementation 'commons-beanutils:commons-beanutils:1.11.0'
-    implementation "org.opensearch:opensearch-remote-metadata-sdk-ddb-client:${opensearch_build}"
+    implementation("org.opensearch:opensearch-remote-metadata-sdk-ddb-client:${opensearch_build}"){
+        exclude group: "org.bouncycastle", module: "bcprov-jdk18on"
+        exclude group: "org.bouncycastle", module: "bcpkix-jdk18on"
+        exclude group: "org.bouncycastle", module: "bcutil-jdk18on"
+        exclude group: "org.bouncycastle", module: "bcprov-ext-jdk18on"
+    }
 
     def os = DefaultNativePlatform.currentOperatingSystem
     //arm/macos doesn't support GPU

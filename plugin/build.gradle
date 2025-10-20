@@ -629,6 +629,9 @@ configurations.all {
     resolutionStrategy.force "org.apache.commons:commons-lang3:${versions.commonslang}"
     resolutionStrategy.force 'commons-logging:commons-logging:1.2'
     resolutionStrategy.force 'org.objenesis:objenesis:3.2'
+    resolutionStrategy.force 'org.dafny:DafnyRuntime:4.9.0'
+    resolutionStrategy.force "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+    resolutionStrategy.force "org.bouncycastle:bcprov-jdk18on:${versions.bouncycastle_jce}"
     resolutionStrategy.force 'net.java.dev.jna:jna:5.11.0'
     resolutionStrategy.force 'org.apache.commons:commons-text:1.14.0'
     resolutionStrategy.force 'com.google.protobuf:protobuf-java:3.25.5'
@@ -655,6 +658,8 @@ configurations.all {
     resolutionStrategy.force 'commons-beanutils:commons-beanutils:1.11.0'
     resolutionStrategy.force "com.google.code.gson:gson:${versions.gson}"
     resolutionStrategy.force "software.amazon.awssdk:bom:${versions.aws}"
+    resolutionStrategy.force "software.amazon.awssdk:kms:${versions.aws}"
+    resolutionStrategy.force "software.amazon.awssdk:dynamodb:${versions.aws}"
     resolutionStrategy.force "software.amazon.awssdk:auth:${versions.aws}"
     resolutionStrategy.force "software.amazon.awssdk:aws-core:${versions.aws}"
     resolutionStrategy.force "software.amazon.awssdk:aws-query-protocol:${versions.aws}"

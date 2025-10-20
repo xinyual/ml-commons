@@ -5,10 +5,12 @@
 
 package org.opensearch.ml.rest;
 
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.ml.common.indexInsight.MLIndexInsightType.STATISTICAL_DATA;
 import static org.opensearch.ml.plugin.MachineLearningPlugin.ML_BASE_URI;
 import static org.opensearch.ml.utils.MLExceptionUtils.AGENT_FRAMEWORK_DISABLED_ERR_MSG;
 import static org.opensearch.ml.utils.RestActionUtils.PARAMETER_INDEX_ID;
+import static org.opensearch.ml.utils.RestActionUtils.PARAMETER_ROLE_ID;
 import static org.opensearch.ml.utils.RestActionUtils.getParameterId;
 import static org.opensearch.ml.utils.TenantAwareHelper.getTenantID;
 
@@ -16,6 +18,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 import org.opensearch.ml.common.settings.MLFeatureEnabledSetting;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetAction;
@@ -64,13 +67,30 @@ public class RestMLGetIndexInsightAction extends BaseRestHandler {
         if (!mlFeatureEnabledSetting.isAgentFrameworkEnabled()) {
             throw new IllegalStateException(AGENT_FRAMEWORK_DISABLED_ERR_MSG);
         }
+        XContentParser parser = request.contentParser();
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+        String cmkRoleArn = null;
+
+        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            String fieldName = parser.currentName();
+            parser.nextToken();
+            switch (fieldName) {
+                case PARAMETER_ROLE_ID:
+                    cmkRoleArn = parser.text();
+                    break;
+                default:
+                    parser.skipChildren();
+                    break;
+            }
+        }
         String tenantId = getTenantID(mlFeatureEnabledSetting.isMultiTenancyEnabled(), request);
         String indexName = getParameterId(request, PARAMETER_INDEX_ID);
+
         String insightType = request.param("insight_type");
         if (insightType == null) {
             insightType = STATISTICAL_DATA.name();
         }
         MLIndexInsightType type = MLIndexInsightType.fromString(insightType);
-        return new MLIndexInsightGetRequest(indexName, type, tenantId);
+        return new MLIndexInsightGetRequest(indexName, cmkRoleArn, type, tenantId);
     }
 }

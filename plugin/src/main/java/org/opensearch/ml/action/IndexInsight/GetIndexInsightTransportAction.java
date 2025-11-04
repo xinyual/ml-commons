@@ -92,67 +92,17 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
             return;
         }
         String indexName = mlIndexInsightGetRequest.getIndexName();
-        String docId = Optional.ofNullable(mlIndexInsightGetRequest.getTenantId()).orElse(DEFAULT_TENANT_ID);
         ActionListener<Boolean> actionAfterDryRun = ActionListener.wrap(r -> {
-            try (ThreadContext.StoredContext getContext = client.threadPool().getThreadContext().stashContext()) {
-                sdkClient
-                    .getDataObjectAsync(
-                        GetDataObjectRequest
-                            .builder()
-                            .tenantId(mlIndexInsightGetRequest.getTenantId())
-                            .id(docId)
-                            .index(ML_INDEX_INSIGHT_CONFIG_INDEX)
-                            .build()
-                    )
-                    .whenComplete((r1, throwable) -> {
-                        getContext.restore();
-                        if (throwable != null) {
-                            Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                            log.error("Failed to get index insight config", cause);
-                            actionListener.onFailure(cause);
-                        } else {
-                            GetResponse getResponse = r1.getResponse();
-                            if (getResponse.isExists()) {
-                                try (
-                                    XContentParser parser = jsonXContent
-                                        .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, getResponse.getSourceAsString())
-                                ) {
-                                    ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                                    IndexInsightConfig indexInsightConfig = IndexInsightConfig.parse(parser);
-                                    Boolean isEnable = indexInsightConfig.getIsEnable();
-                                    if (Boolean.FALSE.equals(isEnable)) {
-                                        actionListener
-                                            .onFailure(
-                                                new RuntimeException(
-                                                    "You are not enabled to use index insight yet, please firstly enable it."
-                                                )
-                                            );
-                                        return;
-                                    }
-                                    try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-                                        ActionListener<MLIndexInsightGetResponse> wrappedListener = ActionListener
-                                            .runBefore(actionListener, () -> context.restore());
-                                        executeTaskAndReturn(
-                                            mlIndexInsightGetRequest,
-                                            mlIndexInsightGetRequest.getTenantId(),
-                                            wrappedListener
-                                        );
-                                    } catch (Exception e) {
-                                        log.error("Failed to get index insight", e);
-                                        actionListener.onFailure(e);
-                                    }
-                                } catch (Exception e) {
-                                    actionListener.onFailure(e);
-                                }
-                            } else {
-                                actionListener
-                                    .onFailure(
-                                        new RuntimeException("You are not enabled to use index insight yet, please firstly enable it.")
-                                    );
-                            }
-                        }
-                    });
+            try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
+                ActionListener<MLIndexInsightGetResponse> wrappedListener = ActionListener
+                        .runBefore(actionListener, () -> context.restore());
+                executeTaskAndReturn(
+                        mlIndexInsightGetRequest,
+                        mlIndexInsightGetRequest.getTenantId(),
+                        wrappedListener
+                );
             } catch (Exception e) {
+                log.error("Failed to get index insight", e);
                 actionListener.onFailure(e);
             }
         }, actionListener::onFailure);

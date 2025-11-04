@@ -46,6 +46,7 @@ import org.opensearch.ml.common.indexInsight.StatisticalDataTask;
 import org.opensearch.ml.common.settings.MLFeatureEnabledSetting;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetRequest;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetResponse;
+import org.opensearch.ml.engine.indices.MLIndicesHandler;
 import org.opensearch.remote.metadata.client.GetDataObjectResponse;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.test.OpenSearchTestCase;
@@ -92,6 +93,9 @@ public class GetIndexInsightTransportActionTests extends OpenSearchTestCase {
     @Mock
     private MLFeatureEnabledSetting mlFeatureEnabledSetting;
 
+    @Mock
+    private MLIndicesHandler mlIndicesHandler;
+
     GetIndexInsightTransportAction getIndexInsightTransportAction;
     MLIndexInsightGetRequest mlIndexInsightGetRequest;
     ThreadContext threadContext;
@@ -113,7 +117,8 @@ public class GetIndexInsightTransportActionTests extends OpenSearchTestCase {
                 xContentRegistry,
                 mlFeatureEnabledSetting,
                 client,
-                sdkClient
+                sdkClient,
+                mlIndicesHandler
             )
         );
 
@@ -123,6 +128,11 @@ public class GetIndexInsightTransportActionTests extends OpenSearchTestCase {
         when(threadPool.getThreadContext()).thenReturn(threadContext);
         when(client.admin()).thenReturn(adminClient);
         when(adminClient.indices()).thenReturn(indicesAdminClient);
+        doAnswer(invocation -> {
+            ActionListener<Boolean> listener = invocation.getArgument(1);
+            listener.onResponse(true);
+            return null;
+        }).when(mlIndicesHandler).initMLIndexIfAbsent(any(), any());
 
         doAnswer(invocation -> {
             ActionListener<GetMappingsResponse> listener = invocation.getArgument(1);

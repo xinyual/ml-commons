@@ -5,29 +5,21 @@
 
 package org.opensearch.ml.action.IndexInsight;
 
-import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_CONFIG_INDEX;
 import static org.opensearch.ml.common.settings.MLCommonsSettings.ML_COMMONS_INDEX_INSIGHT_FEATURE_ENABLED;
-import static org.opensearch.ml.engine.encryptor.EncryptorImpl.DEFAULT_TENANT_ID;
 
 import java.time.Instant;
-import java.util.Optional;
 
 import org.opensearch.action.ActionRequest;
-import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.support.ActionFilters;
 import org.opensearch.action.support.HandledTransportAction;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.ml.common.MLIndex;
 import org.opensearch.ml.common.indexInsight.FieldDescriptionTask;
 import org.opensearch.ml.common.indexInsight.IndexInsight;
 import org.opensearch.ml.common.indexInsight.IndexInsightAccessControllerHelper;
-import org.opensearch.ml.common.indexInsight.IndexInsightConfig;
 import org.opensearch.ml.common.indexInsight.IndexInsightTask;
 import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
 import org.opensearch.ml.common.indexInsight.LogRelatedIndexCheckTask;
@@ -37,10 +29,9 @@ import org.opensearch.ml.common.settings.MLFeatureEnabledSetting;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetAction;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetRequest;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetResponse;
+import org.opensearch.ml.engine.indices.MLIndicesHandler;
 import org.opensearch.ml.utils.TenantAwareHelper;
-import org.opensearch.remote.metadata.client.GetDataObjectRequest;
 import org.opensearch.remote.metadata.client.SdkClient;
-import org.opensearch.remote.metadata.common.SdkClientUtils;
 import org.opensearch.tasks.Task;
 import org.opensearch.transport.TransportService;
 import org.opensearch.transport.client.Client;
@@ -58,6 +49,7 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
     private final SdkClient sdkClient;
     private final NamedXContentRegistry xContentRegistry;
     private final MLFeatureEnabledSetting mlFeatureEnabledSetting;
+    private final MLIndicesHandler mlIndicesHandler;
 
     @Inject
     public GetIndexInsightTransportAction(
@@ -66,13 +58,15 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         NamedXContentRegistry xContentRegistry,
         MLFeatureEnabledSetting mlFeatureEnabledSetting,
         Client client,
-        SdkClient sdkClient
+        SdkClient sdkClient,
+        MLIndicesHandler mlIndicesHandler
     ) {
         super(MLIndexInsightGetAction.NAME, transportService, actionFilters, MLIndexInsightGetRequest::new);
         this.client = client;
         this.xContentRegistry = xContentRegistry;
         this.sdkClient = sdkClient;
         this.mlFeatureEnabledSetting = mlFeatureEnabledSetting;
+        this.mlIndicesHandler = mlIndicesHandler;
     }
 
     @Override
@@ -92,21 +86,22 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
             return;
         }
         String indexName = mlIndexInsightGetRequest.getIndexName();
-        ActionListener<Boolean> actionAfterDryRun = ActionListener.wrap(r -> {
-            try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-                ActionListener<MLIndexInsightGetResponse> wrappedListener = ActionListener
+        mlIndicesHandler.initMLIndexIfAbsent(MLIndex.INDEX_INSIGHT_STORAGE, ActionListener.wrap(r2 -> {
+            ActionListener<Boolean> actionAfterDryRun = ActionListener.wrap(r -> {
+                try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
+                    ActionListener<MLIndexInsightGetResponse> wrappedListener = ActionListener
                         .runBefore(actionListener, () -> context.restore());
-                executeTaskAndReturn(
-                        mlIndexInsightGetRequest,
-                        mlIndexInsightGetRequest.getTenantId(),
-                        wrappedListener
-                );
-            } catch (Exception e) {
-                log.error("Failed to get index insight", e);
-                actionListener.onFailure(e);
-            }
-        }, actionListener::onFailure);
-        IndexInsightAccessControllerHelper.verifyAccessController(client, actionAfterDryRun, indexName);
+                    executeTaskAndReturn(mlIndexInsightGetRequest, mlIndexInsightGetRequest.getTenantId(), wrappedListener);
+                } catch (Exception e) {
+                    log.error("Failed to get index insight", e);
+                    actionListener.onFailure(e);
+                }
+            }, actionListener::onFailure);
+            IndexInsightAccessControllerHelper.verifyAccessController(client, actionAfterDryRun, indexName);
+        }, e -> {
+            log.error("Failed to create index insight config", e);
+            actionListener.onFailure(e);
+        }));
     }
 
     private void executeTaskAndReturn(

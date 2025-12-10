@@ -18,10 +18,10 @@ import org.opensearch.core.common.io.stream.InputStreamStreamInput;
 import org.opensearch.core.common.io.stream.OutputStreamStreamOutput;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 
 import lombok.Builder;
 import lombok.Getter;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 
 @Builder
 @Getter

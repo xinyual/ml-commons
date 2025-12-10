@@ -5,7 +5,13 @@
 
 package org.opensearch.ml.action.IndexInsight;
 
+import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_STORAGE_INDEX;
+import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_STORAGE_INDEX_MAPPING_PATH;
+import static org.opensearch.ml.common.indexInsight.MLIndexInsightType.FIELD_DESCRIPTION;
+import static org.opensearch.ml.common.memorycontainer.MemoryContainerConstants.MEMORY_CONTAINER_ID_FIELD;
 import static org.opensearch.ml.common.settings.MLCommonsSettings.ML_COMMONS_INDEX_INSIGHT_FEATURE_ENABLED;
+import static org.opensearch.ml.common.indexInsight.MLIndexInsightType.LOG_RELATED_INDEX_CHECK;
+import static org.opensearch.ml.common.indexInsight.MLIndexInsightType.STATISTICAL_DATA;
 
 import java.time.Instant;
 
@@ -15,20 +21,22 @@ import org.opensearch.action.support.HandledTransportAction;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.ml.common.MLIndex;
-import org.opensearch.ml.common.indexInsight.FieldDescriptionTask;
 import org.opensearch.ml.common.indexInsight.IndexInsight;
-import org.opensearch.ml.common.indexInsight.IndexInsightAccessControllerHelper;
-import org.opensearch.ml.common.indexInsight.IndexInsightTask;
 import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
-import org.opensearch.ml.common.indexInsight.LogRelatedIndexCheckTask;
 import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
-import org.opensearch.ml.common.indexInsight.StatisticalDataTask;
+import org.opensearch.ml.common.memorycontainer.RemoteStore;
 import org.opensearch.ml.common.settings.MLFeatureEnabledSetting;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetAction;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetRequest;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetResponse;
 import org.opensearch.ml.engine.indices.MLIndicesHandler;
+import org.opensearch.ml.helper.MemoryContainerHelper;
+import org.opensearch.ml.helper.RemoteMemoryStoreHelper;
+import org.opensearch.ml.indexInsight.FieldDescriptionTask;
+import org.opensearch.ml.indexInsight.IndexInsightAccessControllerHelper;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.indexInsight.LogRelatedIndexCheckTask;
+import org.opensearch.ml.indexInsight.StatisticalDataTask;
 import org.opensearch.ml.utils.TenantAwareHelper;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.tasks.Task;
@@ -41,7 +49,7 @@ import lombok.extern.log4j.Log4j2;
 public class GetIndexInsightTransportAction extends HandledTransportAction<ActionRequest, MLIndexInsightGetResponse> {
     private static final MLIndexInsightType[] ALL_TYPE_ORDER = {
         MLIndexInsightType.STATISTICAL_DATA,
-        MLIndexInsightType.FIELD_DESCRIPTION,
+        FIELD_DESCRIPTION,
         MLIndexInsightType.LOG_RELATED_INDEX_CHECK };
 
     private final Client client;
@@ -49,6 +57,8 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
     private final NamedXContentRegistry xContentRegistry;
     private final MLFeatureEnabledSetting mlFeatureEnabledSetting;
     private final MLIndicesHandler mlIndicesHandler;
+    private final RemoteMemoryStoreHelper remoteMemoryStoreHelper;
+    private final MemoryContainerHelper memoryContainerHelper;
 
     @Inject
     public GetIndexInsightTransportAction(
@@ -58,7 +68,9 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         MLFeatureEnabledSetting mlFeatureEnabledSetting,
         Client client,
         SdkClient sdkClient,
-        MLIndicesHandler mlIndicesHandler
+        MLIndicesHandler mlIndicesHandler,
+        RemoteMemoryStoreHelper remoteMemoryStoreHelper,
+        MemoryContainerHelper memoryContainerHelper
     ) {
         super(MLIndexInsightGetAction.NAME, transportService, actionFilters, MLIndexInsightGetRequest::new);
         this.client = client;
@@ -66,6 +78,8 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         this.sdkClient = sdkClient;
         this.mlFeatureEnabledSetting = mlFeatureEnabledSetting;
         this.mlIndicesHandler = mlIndicesHandler;
+        this.remoteMemoryStoreHelper = remoteMemoryStoreHelper;
+        this.memoryContainerHelper = memoryContainerHelper;
     }
 
     @Override
@@ -85,14 +99,24 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
             return;
         }
         String indexName = mlIndexInsightGetRequest.getIndexName();
-        mlIndicesHandler.initMLIndexIfAbsent(MLIndex.INDEX_INSIGHT_STORAGE, ActionListener.wrap(r2 -> {
-            ActionListener<Boolean> actionAfterDryRun = ActionListener.wrap(r -> {
-                executeTaskAndReturn(mlIndexInsightGetRequest, mlIndexInsightGetRequest.getTenantId(), actionListener);
-            }, actionListener::onFailure);
-            IndexInsightAccessControllerHelper.verifyAccessController(client, actionAfterDryRun, indexName);
+        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID_FIELD);
+        String indexMappings = mlIndicesHandler.getMapping(ML_INDEX_INSIGHT_STORAGE_INDEX_MAPPING_PATH);
+        memoryContainerHelper.getMemoryContainer(memoryContainerId, ActionListener.wrap(mlMemoryContainer -> {
+            RemoteStore remoteStore = mlMemoryContainer.getConfiguration().getRemoteStore();
+            if (remoteStore.getConnectorId() != null) {
+                remoteMemoryStoreHelper.createRemoteIndex(remoteStore.getConnectorId(), ML_INDEX_INSIGHT_STORAGE_INDEX, indexMappings, ActionListener.<Boolean>wrap(r2 -> {
+                    ActionListener<Boolean> actionAfterDryRun = ActionListener.wrap(r -> {
+                        executeTaskAndReturn(mlIndexInsightGetRequest, mlIndexInsightGetRequest.getTenantId(), actionListener);
+                    }, actionListener::onFailure);
+                    IndexInsightAccessControllerHelper.verifyAccessController(client, actionAfterDryRun, indexName);
+                }, e -> {
+                    log.error("Failed to create index insight storage", e);
+                    actionListener.onFailure(e);
+                }));
+            }
+
         }, e -> {
-            log.error("Failed to create index insight storage", e);
-            actionListener.onFailure(e);
+            log.error("Failed to retrieve memory container", e);
         }));
     }
 
@@ -192,7 +216,9 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        remoteMemoryStoreHelper,
+                        memoryContainerHelper
                 );
             case FIELD_DESCRIPTION:
                 return new FieldDescriptionTask(
@@ -200,7 +226,9 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        remoteMemoryStoreHelper,
+                        memoryContainerHelper
                 );
             case LOG_RELATED_INDEX_CHECK:
                 return new LogRelatedIndexCheckTask(
@@ -208,7 +236,9 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        remoteMemoryStoreHelper,
+                        memoryContainerHelper
                 );
             default:
                 throw new IllegalArgumentException("Unsupported task type: " + request.getTargetIndexInsight());

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.indexInsight;
 
 import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_AGENT_NAME;
 import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_GENERATING_TIMEOUT;
@@ -11,6 +11,7 @@ import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_UPDATE_INTERVAL
 import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_STORAGE_INDEX;
 import static org.opensearch.ml.common.indexInsight.IndexInsight.INDEX_NAME_FIELD;
 import static org.opensearch.ml.common.indexInsight.IndexInsight.TASK_TYPE_FIELD;
+import static org.opensearch.ml.common.memorycontainer.MemoryContainerConstants.MEMORY_CONTAINER_ID_FIELD;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
 import java.nio.charset.StandardCharsets;
@@ -25,8 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.support.WriteRequest;
 import org.opensearch.common.Numbers;
 import org.opensearch.common.regex.Regex;
 import org.opensearch.common.util.concurrent.ThreadContext;
@@ -39,7 +42,12 @@ import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLConfig;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
+import org.opensearch.ml.common.memorycontainer.RemoteStore;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
@@ -47,8 +55,8 @@ import org.opensearch.ml.common.transport.config.MLConfigGetAction;
 import org.opensearch.ml.common.transport.config.MLConfigGetRequest;
 import org.opensearch.ml.common.transport.execute.MLExecuteTaskAction;
 import org.opensearch.ml.common.transport.execute.MLExecuteTaskRequest;
-import org.opensearch.remote.metadata.client.GetDataObjectRequest;
-import org.opensearch.remote.metadata.client.PutDataObjectRequest;
+import org.opensearch.ml.helper.MemoryContainerHelper;
+import org.opensearch.ml.helper.RemoteMemoryStoreHelper;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.remote.metadata.client.SearchDataObjectRequest;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
@@ -73,6 +81,9 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
     protected final SdkClient sdkClient;
     protected final String cmkRoleArn;
     protected final String cmkAssumeRoleArn;
+    protected final RemoteMemoryStoreHelper remoteMemoryStoreHelper;
+    protected final MemoryContainerHelper memoryContainerHelper;
+    protected final String memoryContainerId;
 
     protected AbstractIndexInsightTask(
         MLIndexInsightType taskType,
@@ -80,7 +91,9 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         Client client,
         SdkClient sdkClient,
         String cmkRoleArn,
-        String cmkAssumeRoleArn
+        String cmkAssumeRoleArn,
+        RemoteMemoryStoreHelper remoteMemoryStoreHelper,
+        MemoryContainerHelper memoryContainerHelper
     ) {
         this.taskType = taskType;
         this.sourceIndex = sourceIndex;
@@ -88,6 +101,9 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         this.sdkClient = sdkClient;
         this.cmkRoleArn = cmkRoleArn;
         this.cmkAssumeRoleArn = cmkAssumeRoleArn;
+        this.remoteMemoryStoreHelper = remoteMemoryStoreHelper;
+        this.memoryContainerHelper = memoryContainerHelper;
+        this.memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID_FIELD);
     }
 
     /**
@@ -335,78 +351,40 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
     }
 
     private void getIndexInsight(String docId, String tenantId, ActionListener<GetResponse> listener) {
-        try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            sdkClient
-                .getDataObjectAsync(
-                    GetDataObjectRequest
-                        .builder()
-                        .tenantId(tenantId)
-                        .index(ML_INDEX_INSIGHT_STORAGE_INDEX)
-                        .id(docId)
-                        .cmkRoleArn(cmkRoleArn)
-                        .assumeRoleArn(cmkAssumeRoleArn)
-                        .build()
-                )
-                .whenComplete((r, throwable) -> {
-                    context.restore();
-                    if (throwable != null) {
-                        Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                        log.error("Failed to get index insight document", cause);
-                        listener.onFailure(cause);
-                    } else {
-                        try {
-                            GetResponse getResponse = r.getResponse();
-                            assert getResponse != null;
-                            listener.onResponse(getResponse);
-                        } catch (Exception e) {
-                            listener.onFailure(e);
-                        }
+        memoryContainerHelper.getMemoryContainer(memoryContainerId, ActionListener.wrap(mlMemoryContainer -> {
+            RemoteStore remoteStore = mlMemoryContainer.getConfiguration().getRemoteStore();
+            remoteMemoryStoreHelper.getDocument(remoteStore, ML_INDEX_INSIGHT_STORAGE_INDEX, docId, ActionListener.<GetResponse>wrap(listener::onResponse, e -> {
+                        listener.onFailure(new RuntimeException("Fail to retrieve index insight", e));
                     }
-                });
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
+
+            ));
+        }, e -> {
+            listener.onFailure(new RuntimeException("Error happening when retrieve memory container", e));
+        }));
     }
+
 
     private void writeIndexInsight(IndexInsight indexInsight, String tenantId, ActionListener<Boolean> listener) {
         String docId = generateDocId();
-        try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            sdkClient
-                .putDataObjectAsync(
-                    PutDataObjectRequest
-                        .builder()
-                        .tenantId(tenantId)
-                        .index(ML_INDEX_INSIGHT_STORAGE_INDEX)
-                        .dataObject(indexInsight)
-                        .id(docId)
-                        .cmkRoleArn(cmkRoleArn)
-                        .assumeRoleArn(cmkAssumeRoleArn)
-                        .build()
-                )
-                .whenComplete((r, throwable) -> {
-                    context.restore();
-                    if (throwable != null) {
-                        Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                        log.error("Failed to write index insight document", cause);
-                        listener.onFailure(cause);
-                    } else {
-                        try {
-                            IndexResponse indexResponse = r.indexResponse();
-                            assert indexResponse != null;
-                            if (indexResponse.getResult() == DocWriteResponse.Result.CREATED
-                                || indexResponse.getResult() == DocWriteResponse.Result.UPDATED) {
-                                listener.onResponse(true);
-                            } else {
-                                listener.onFailure(new RuntimeException("Failed to put generating index insight doc"));
-                            }
-                        } catch (Exception e) {
-                            listener.onFailure(e);
-                        }
+        IndexRequest indexRequest = new IndexRequest(ML_INDEX_INSIGHT_STORAGE_INDEX).id(docId).source(indexInsight);
+        indexRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        memoryContainerHelper.getMemoryContainer(memoryContainerId, ActionListener.wrap(mlMemoryContainer -> {
+            RemoteStore remoteStore = mlMemoryContainer.getConfiguration().getRemoteStore();
+            remoteMemoryStoreHelper.writeDocumentWithDocID(remoteStore, docId, tenantId, indexRequest.sourceAsMap(), ActionListener.<IndexResponse>wrap(indexResponse -> {
+                if (indexResponse.getResult() == DocWriteResponse.Result.CREATED
+                    || indexResponse.getResult() == DocWriteResponse.Result.UPDATED) {
+                    listener.onResponse(true);
+                } else {
+                    listener.onFailure(new RuntimeException("Failed to put generating index insight doc"));
+                }
+                    }, e -> {
+                listener.onFailure(new RuntimeException("Error happening when putting doc", e));
                     }
-                });
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
+
+            ));
+        }, e -> {
+            listener.onFailure(new RuntimeException("Error happening when retrieve memory container", e));
+        }));
     }
 
     protected static void getAgentIdToRun(Client client, String tenantId, ActionListener<String> actionListener) {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.indexInsight;
 
 import static org.opensearch.ml.common.utils.StringUtils.MAPPER;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
@@ -17,6 +17,11 @@ import java.util.Map;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
+import org.opensearch.ml.helper.MemoryContainerHelper;
+import org.opensearch.ml.helper.RemoteMemoryStoreHelper;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -81,8 +86,9 @@ public class LogRelatedIndexCheckTask extends AbstractIndexInsightTask {
             - Your judgment should be based on both semantics and field patterns (e.g., field names like "message", "log", "trace", "span", etc).
             """;
 
-    public LogRelatedIndexCheckTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn) {
-        super(MLIndexInsightType.LOG_RELATED_INDEX_CHECK, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn);
+    public LogRelatedIndexCheckTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn, RemoteMemoryStoreHelper remoteMemoryStoreHelper,
+                                    MemoryContainerHelper memoryContainerHelper) {
+        super(MLIndexInsightType.LOG_RELATED_INDEX_CHECK, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn, remoteMemoryStoreHelper, memoryContainerHelper);
     }
 
     @Override

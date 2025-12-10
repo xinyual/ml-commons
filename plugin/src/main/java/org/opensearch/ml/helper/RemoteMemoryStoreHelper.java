@@ -41,6 +41,7 @@ import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.Nullable;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -84,6 +85,7 @@ public class RemoteMemoryStoreHelper {
     public static final String CREATE_INGEST_PIPELINE_ACTION = "create_ingest_pipeline";
     public static final String CREATE_INDEX_ACTION = "create_index";
     public static final String WRITE_DOC_ACTION = "write_doc";
+    public static final String WRITE_DOC_ACTION_WITH_ID = "write_doc_withID";
     public static final String BULK_LOAD_ACTION = "bulk_load";
     public static final String SEARCH_INDEX_ACTION = "search_index";
     public static final String GET_DOC_ACTION = "get_doc";
@@ -471,6 +473,21 @@ public class RemoteMemoryStoreHelper {
         }
     }
 
+    public void writeDocumentWithDocID(
+            RemoteStore remoteStore,
+            String docId,
+            String indexName,
+            Map<String, Object> documentSource,
+            ActionListener<IndexResponse> listener
+    ) {
+        // If connectorId is provided, use the existing method
+        if (remoteStore.getConnector() != null) {
+            writeDocument(remoteStore.getConnector(), indexName, documentSource, listener, docId);
+        } else {
+            listener.onFailure(new IllegalArgumentException("RemoteStore must have either connectorId or internal connector configured"));
+        }
+    }
+
     public void writeDocument(
         String connectorId,
         String indexName,
@@ -528,6 +545,38 @@ public class RemoteMemoryStoreHelper {
             listener.onFailure(e);
         }
     }
+
+    public void writeDocument(
+            Connector connector,
+            String indexName,
+            Map<String, Object> documentSource,
+            ActionListener<IndexResponse> listener,
+            String docId
+    ) {
+        try {
+            // Prepare parameters for connector execution
+            Map<String, String> parameters = new HashMap<>();
+            parameters.put(INDEX_NAME_PARAM, indexName);
+            parameters.put(DOC_ID_PARAM, docId);
+            parameters.put(INPUT_PARAM, StringUtils.toJsonWithPlainNumbers(documentSource));
+
+            // Execute the connector action with write_doc action name
+            executeConnectorAction(connector, WRITE_DOC_ACTION_WITH_ID, parameters, ActionListener.wrap(response -> {
+                // Extract document ID from response
+                XContentParser parser = createParserFromTensorOutput(response);
+                IndexResponse indexResponse = IndexResponse.fromXContent(parser);
+                listener.onResponse(indexResponse);
+            }, e -> {
+                log.error("Failed to write document to remote index: {}", indexName, e);
+                listener.onFailure(e);
+            }));
+
+        } catch (Exception e) {
+            log.error("Error preparing remote document write for index: {}", indexName, e);
+            listener.onFailure(e);
+        }
+    }
+
 
     /**
      * Performs bulk write operations to remote storage using RemoteStore configuration

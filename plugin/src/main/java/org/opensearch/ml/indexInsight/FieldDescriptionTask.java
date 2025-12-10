@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.indexInsight;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.opensearch.ml.common.indexInsight.StatisticalDataTask.EXAMPLE_DOC_KEYWORD;
-import static org.opensearch.ml.common.indexInsight.StatisticalDataTask.IMPORTANT_COLUMN_KEYWORD;
+import static org.opensearch.ml.indexInsight.StatisticalDataTask.EXAMPLE_DOC_KEYWORD;
+import static org.opensearch.ml.indexInsight.StatisticalDataTask.IMPORTANT_COLUMN_KEYWORD;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
 import java.time.Instant;
@@ -25,6 +25,12 @@ import org.opensearch.action.LatchedActionListener;
 import org.opensearch.action.admin.indices.mapping.get.GetMappingsRequest;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
+import org.opensearch.ml.helper.MemoryContainerHelper;
+import org.opensearch.ml.helper.RemoteMemoryStoreHelper;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.transport.client.Client;
 
@@ -40,8 +46,9 @@ public class FieldDescriptionTask extends AbstractIndexInsightTask {
 
     private static final int BATCH_SIZE = 50; // Hard-coded value for now
 
-    public FieldDescriptionTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn) {
-        super(MLIndexInsightType.FIELD_DESCRIPTION, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn);
+    public FieldDescriptionTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn, RemoteMemoryStoreHelper remoteMemoryStoreHelper,
+                                MemoryContainerHelper memoryContainerHelper) {
+        super(MLIndexInsightType.FIELD_DESCRIPTION, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn, remoteMemoryStoreHelper, memoryContainerHelper);
     }
 
     @Override
@@ -330,7 +337,7 @@ public class FieldDescriptionTask extends AbstractIndexInsightTask {
     @Override
     public IndexInsightTask createPrerequisiteTask(MLIndexInsightType prerequisiteType) {
         if (prerequisiteType == MLIndexInsightType.STATISTICAL_DATA) {
-            return new StatisticalDataTask(sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn);
+            return new StatisticalDataTask(sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn, remoteMemoryStoreHelper, memoryContainerHelper);
         }
         throw new IllegalStateException("Unsupported prerequisite type: " + prerequisiteType);
     }

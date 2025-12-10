@@ -36,7 +36,7 @@ public class CommonValue {
     // warm node
     public static String WARM_BOX_TYPE = "warm";
     public static final String ML_INDEX_INSIGHT_CONFIG_INDEX = ".plugins-ml-index-insight-config";
-    public static final String ML_INDEX_INSIGHT_STORAGE_INDEX = ".plugins-ml-index-insight-storage";
+    public static final String ML_INDEX_INSIGHT_STORAGE_INDEX = "plugins-ml-index-insight-storage";
 
     public static final String ML_MODEL_GROUP_INDEX = ".plugins-ml-model-group";
     public static final String ML_MODEL_INDEX = ".plugins-ml-model";

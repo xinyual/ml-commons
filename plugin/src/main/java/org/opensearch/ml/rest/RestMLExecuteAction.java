@@ -8,6 +8,7 @@ package org.opensearch.ml.rest;
 import static org.opensearch.core.rest.RestStatus.BAD_REQUEST;
 import static org.opensearch.core.rest.RestStatus.INTERNAL_SERVER_ERROR;
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.ml.common.memorycontainer.MemoryContainerConstants.MEMORY_CONTAINER_ID_FIELD;
 import static org.opensearch.ml.common.settings.MLCommonsSettings.ML_COMMONS_AG_UI_DISABLED_MESSAGE;
 import static org.opensearch.ml.common.settings.MLCommonsSettings.ML_COMMONS_EXECUTE_TOOL_DISABLED_MESSAGE;
 import static org.opensearch.ml.plugin.MachineLearningPlugin.ML_BASE_URI;
@@ -162,6 +163,7 @@ public class RestMLExecuteAction extends BaseRestHandler {
                     );
                 }
                 putMcpRequestHeaders(request, client);
+                client.threadPool().getThreadContext().putHeader(MEMORY_CONTAINER_ID_FIELD, request.header(MEMORY_CONTAINER_ID_FIELD));
             }
         } else if (uri.startsWith(ML_BASE_URI + "/tools/")) {
             if (!mlFeatureEnabledSetting.isToolExecuteEnabled()) {

@@ -5,6 +5,7 @@
 
 package org.opensearch.ml.common.indexInsight;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.opensearch.core.action.ActionListener;
@@ -17,7 +18,7 @@ public interface IndexInsightTask {
     /**
      * Execute the index insight task
      */
-    void execute(String tenantId, ActionListener<IndexInsight> listener);
+    void execute(String tenantId, ActionListener<IndexInsight> listener) throws IOException;
 
     /**
      * Get the prerequisites of this task

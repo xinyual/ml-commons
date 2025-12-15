@@ -16,14 +16,14 @@ import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.ml.common.MLIndex;
-import org.opensearch.ml.common.indexInsight.FieldDescriptionTask;
+import org.opensearch.ml.engine.indexInsight.FieldDescriptionTask;
 import org.opensearch.ml.common.indexInsight.IndexInsight;
 import org.opensearch.ml.common.indexInsight.IndexInsightAccessControllerHelper;
 import org.opensearch.ml.common.indexInsight.IndexInsightTask;
 import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
-import org.opensearch.ml.common.indexInsight.LogRelatedIndexCheckTask;
+import org.opensearch.ml.engine.indexInsight.LogRelatedIndexCheckTask;
 import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
-import org.opensearch.ml.common.indexInsight.StatisticalDataTask;
+import org.opensearch.ml.engine.indexInsight.StatisticalDataTask;
 import org.opensearch.ml.common.settings.MLFeatureEnabledSetting;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetAction;
 import org.opensearch.ml.common.transport.indexInsight.MLIndexInsightGetRequest;
@@ -192,7 +192,8 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        xContentRegistry
                 );
             case FIELD_DESCRIPTION:
                 return new FieldDescriptionTask(
@@ -200,7 +201,8 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        xContentRegistry
                 );
             case LOG_RELATED_INDEX_CHECK:
                 return new LogRelatedIndexCheckTask(
@@ -208,7 +210,8 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
                     client,
                     sdkClient,
                     request.getCmkRoleArn(),
-                    request.getAssumeRoleArn()
+                    request.getAssumeRoleArn(),
+                        xContentRegistry
                 );
             default:
                 throw new IllegalArgumentException("Unsupported task type: " + request.getTargetIndexInsight());

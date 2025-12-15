@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.engine.indexInsight;
 
+import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_AGENT_NAME;
 import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_GENERATING_TIMEOUT;
 import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_UPDATE_INTERVAL;
@@ -12,9 +13,12 @@ import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_STORAGE_INDE
 import static org.opensearch.ml.common.indexInsight.IndexInsight.INDEX_NAME_FIELD;
 import static org.opensearch.ml.common.indexInsight.IndexInsight.TASK_TYPE_FIELD;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
+import static org.opensearch.ml.engine.memory.RemoteAgenticConversationMemory.CREATED_TIME_FIELD;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -30,16 +34,27 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.Numbers;
 import org.opensearch.common.regex.Regex;
 import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.RegexpQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLConfig;
+import org.opensearch.ml.common.conversation.Interaction;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
+import org.opensearch.ml.common.memory.Memory;
+import org.opensearch.ml.common.memory.Message;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
@@ -47,12 +62,14 @@ import org.opensearch.ml.common.transport.config.MLConfigGetAction;
 import org.opensearch.ml.common.transport.config.MLConfigGetRequest;
 import org.opensearch.ml.common.transport.execute.MLExecuteTaskAction;
 import org.opensearch.ml.common.transport.execute.MLExecuteTaskRequest;
+import org.opensearch.ml.engine.memory.RemoteAgenticConversationMemory;
 import org.opensearch.remote.metadata.client.GetDataObjectRequest;
 import org.opensearch.remote.metadata.client.PutDataObjectRequest;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.remote.metadata.client.SearchDataObjectRequest;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.transport.client.Client;
 
@@ -60,6 +77,8 @@ import com.google.common.hash.Hashing;
 import com.jayway.jsonpath.JsonPath;
 
 import lombok.extern.log4j.Log4j2;
+
+import javax.swing.*;
 
 /**
  * Abstract base class providing default implementation for IndexInsightTask
@@ -73,6 +92,12 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
     protected final SdkClient sdkClient;
     protected final String cmkRoleArn;
     protected final String cmkAssumeRoleArn;
+    protected final RemoteAgenticConversationMemory memory;
+    protected String docId;
+
+    public static final String APPLICATION_ID = "application_id";
+    public static final String MEMORY_CONTAINER_ID = "memory_container_id";
+    protected final NamedXContentRegistry xContentRegistry;
 
     protected AbstractIndexInsightTask(
         MLIndexInsightType taskType,
@@ -80,14 +105,19 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         Client client,
         SdkClient sdkClient,
         String cmkRoleArn,
-        String cmkAssumeRoleArn
+        String cmkAssumeRoleArn,
+        NamedXContentRegistry xContentRegistry
     ) {
+        this.docId = null;
         this.taskType = taskType;
         this.sourceIndex = sourceIndex;
         this.client = client;
         this.sdkClient = sdkClient;
         this.cmkRoleArn = cmkRoleArn;
         this.cmkAssumeRoleArn = cmkAssumeRoleArn;
+        this.xContentRegistry = xContentRegistry;
+        this.memory = client.threadPool().getThreadContext().getTransient(RemoteAgenticConversationMemory.TYPE);
+
     }
 
     /**
@@ -99,47 +129,18 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
      * 5. Write back to storage
      */
     @Override
-    public void execute(String tenantId, ActionListener<IndexInsight> listener) {
+    public void execute(String tenantId, ActionListener<IndexInsight> listener) throws IOException {
         getIndexInsight(generateDocId(), tenantId, ActionListener.wrap(getResponse -> {
-            if (getResponse.isExists()) {
-                handleExistingDoc(getResponse.getSourceAsMap(), tenantId, listener);
+            if (!Objects.isNull(getResponse)) {
+                handleExistingDoc(getResponse, tenantId, listener);
             } else {
-                SearchSourceBuilder patternSourceBuilder = buildPatternSourceBuilder(taskType.name());
-                try (ThreadContext.StoredContext searchContext = client.threadPool().getThreadContext().stashContext()) {
-                    sdkClient
-                        .searchDataObjectAsync(
-                            SearchDataObjectRequest
-                                .builder()
-                                .tenantId(tenantId)
-                                .indices(ML_INDEX_INSIGHT_STORAGE_INDEX)
-                                .searchSourceBuilder(patternSourceBuilder)
-                                .build()
-                        )
-                        .whenComplete((r, throwable) -> {
-                            searchContext.restore();
-                            if (throwable != null) {
-                                Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                                log.error("Failed to get index insight pattern", cause);
-                                beginGeneration(tenantId, listener);
-                            } else {
-                                SearchResponse searchResponse = r.searchResponse();
-                                SearchHit[] hits = searchResponse.getHits().getHits();
-                                Map<String, Object> mappedPatternSource = matchPattern(hits, sourceIndex);
-                                if (Objects.isNull(mappedPatternSource)) {
-                                    beginGeneration(tenantId, listener);
-                                } else {
-                                    handlePatternMatchedDoc(mappedPatternSource, tenantId, listener);
-                                }
-                            }
-                        });
-                } catch (Exception e) {
-                    listener.onFailure(e);
-                }
+                beginGeneration(tenantId, listener);
             }
         }, listener::onFailure));
     }
 
-    protected void handleExistingDoc(Map<String, Object> source, String tenantId, ActionListener<IndexInsight> listener) {
+    protected void handleExistingDoc(Map<String, Object> originalSource, String tenantId, ActionListener<IndexInsight> listener) {
+        Map<String, Object> source = (Map<String, Object>) originalSource.get("structured_data_blob");
         String currentStatus = (String) source.get(IndexInsight.STATUS_FIELD);
         Object v = source.get(IndexInsight.LAST_UPDATE_FIELD);
         Long lastUpdateTime = (v == null) ? null
@@ -232,7 +233,7 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         );
     }
 
-    protected void runWithPrerequisites(String tenantId, ActionListener<IndexInsight> listener) {
+    protected void runWithPrerequisites(String tenantId, ActionListener<IndexInsight> listener) throws IOException {
         List<MLIndexInsightType> prerequisites = getPrerequisites();
         AtomicInteger completedCount = new AtomicInteger(0);
         if (prerequisites.isEmpty()) {
@@ -305,11 +306,11 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         MLIndexInsightType taskType,
         String tenantId,
         ActionListener<Map<String, Object>> listener
-    ) {
+    ) throws IOException {
         String docId = generateDocId(taskType);
         getIndexInsight(docId, tenantId, ActionListener.wrap(getResponse -> {
             try {
-                String content = getResponse.isExists() ? getResponse.getSourceAsMap().get(IndexInsight.CONTENT_FIELD).toString() : "";
+                String content = getResponse.getOrDefault(IndexInsight.CONTENT_FIELD, "").toString();
                 Map<String, Object> contentMap = gson.fromJson(content, Map.class);
                 listener.onResponse(contentMap);
             } catch (Exception e) {
@@ -334,78 +335,97 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         listener.onResponse(insight);
     }
 
-    private void getIndexInsight(String docId, String tenantId, ActionListener<GetResponse> listener) {
-        try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            sdkClient
-                .getDataObjectAsync(
-                    GetDataObjectRequest
-                        .builder()
-                        .tenantId(tenantId)
-                        .index(ML_INDEX_INSIGHT_STORAGE_INDEX)
-                        .id(docId)
-                        .cmkRoleArn(cmkRoleArn)
-                        .assumeRoleArn(cmkAssumeRoleArn)
-                        .build()
-                )
-                .whenComplete((r, throwable) -> {
-                    context.restore();
-                    if (throwable != null) {
-                        Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                        log.error("Failed to get index insight document", cause);
-                        listener.onFailure(cause);
-                    } else {
-                        try {
-                            GetResponse getResponse = r.getResponse();
-                            assert getResponse != null;
-                            listener.onResponse(getResponse);
-                        } catch (Exception e) {
-                            listener.onFailure(e);
+    private void getIndexInsight(String docId, String tenantId, ActionListener<Map<String, Object>> listener) throws IOException {
+        this.memory.executeConnectorAction("search_memories", buildGetIndexInsightQuery(), ActionListener.wrap(r -> {
+            try (XContentParser parser = jsonXContent.createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, r)) {
+                SearchResponse searchResponse = SearchResponse.fromXContent(parser);
+                if (searchResponse.getHits() != null && searchResponse.getHits().getHits() != null) {
+                    SearchHit[] hits = searchResponse.getHits().getHits();
+                    if (hits.length > 0) {
+                        this.docId = hits[0].getId();
+                        Map<String, Object> sourceMap = hits[0].getSourceAsMap();
+                        if (sourceMap.containsKey("structured_data_blob")) {
+                            listener.onResponse((Map<String, Object>) sourceMap.get("structured_data_blob"));
                         }
+                        return;
                     }
-                });
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
+                }
+                listener.onResponse(null);
+            } catch (Exception e) {
+                listener.onFailure(e);
+            }}, e -> {listener.onFailure(e);}
+
+        ));
+    }
+
+    private Map<String, Object> buildGetIndexInsightQuery() {
+        String applicationId = client.threadPool().getThreadContext().getHeader(APPLICATION_ID);
+        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID);
+        Map<String, Object> query = new HashMap<>();
+        Map<String, Object> bool = new HashMap<>();
+        List<Map<String, Object>> must = new ArrayList<>();
+        // Must match session_id
+        Map<String, Object> sessionTerm = new HashMap<>();
+        sessionTerm.put("namespace." + APPLICATION_ID, applicationId);
+        must.add(Map.of("term", sessionTerm));
+
+        Map<String, Object> metaDataTerm = new HashMap<>();
+        metaDataTerm.put("metadata.index", sourceIndex);
+        must.add(Map.of("term", metaDataTerm));
+
+        Map<String, Object> dataTypeTerm = new HashMap<>();
+        metaDataTerm.put("tags.data_type", "index_insight");
+        must.add(Map.of("term", dataTypeTerm));
+
+        Map<String, Object> taskTypeTerm = new HashMap<>();
+        metaDataTerm.put("task_type.task_type", taskType);
+        must.add(Map.of("term", taskTypeTerm));
+
+        bool.put("must", must);
+        query.put("bool", bool);
+
+        // Build search request
+        Map<String, Object> searchRequest = new HashMap<>();
+        searchRequest.put("memory_container_id", memoryContainerId);
+        searchRequest.put("memory_type", "working");
+        searchRequest.put("query", query);
+        searchRequest.put("size", 1);
+        searchRequest.put("sort", List.of(Map.of(CREATED_TIME_FIELD, "asc")));
+        return searchRequest;
+    }
+
+    private Map<String, Object> buildWriteIndexInsightQuery(IndexInsight indexInsight) {
+        String applicationId = client.threadPool().getThreadContext().getHeader(APPLICATION_ID);
+        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID);
+        Map<String, String> namespace = new HashMap<>();
+        namespace.put(APPLICATION_ID, applicationId);
+
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("index", sourceIndex);
+        metadata.put("task_type", taskType.toString());
+
+        Map<String, Object> structuredData = new HashMap<>();
+        // Store data in structured_data format matching conversation index
+        structuredData.putAll(indexInsight.toMap());
+
+        // Build request body for add_memory action
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("memory_container_id", memoryContainerId);
+        requestBody.put("structured_data_blob", structuredData);
+        requestBody.put("message_id", null); // Store trace number in messageId field (null for messages)
+        requestBody.put("namespace", namespace);
+        requestBody.put("metadata", metadata);
+        requestBody.put("infer", false); // Don't infer long-term memory by default
+        return requestBody;
     }
 
     private void writeIndexInsight(IndexInsight indexInsight, String tenantId, ActionListener<Boolean> listener) {
-        String docId = generateDocId();
-        try (ThreadContext.StoredContext context = client.threadPool().getThreadContext().stashContext()) {
-            sdkClient
-                .putDataObjectAsync(
-                    PutDataObjectRequest
-                        .builder()
-                        .tenantId(tenantId)
-                        .index(ML_INDEX_INSIGHT_STORAGE_INDEX)
-                        .dataObject(indexInsight)
-                        .id(docId)
-                        .cmkRoleArn(cmkRoleArn)
-                        .assumeRoleArn(cmkAssumeRoleArn)
-                        .build()
-                )
-                .whenComplete((r, throwable) -> {
-                    context.restore();
-                    if (throwable != null) {
-                        Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
-                        log.error("Failed to write index insight document", cause);
-                        listener.onFailure(cause);
-                    } else {
-                        try {
-                            IndexResponse indexResponse = r.indexResponse();
-                            assert indexResponse != null;
-                            if (indexResponse.getResult() == DocWriteResponse.Result.CREATED
-                                || indexResponse.getResult() == DocWriteResponse.Result.UPDATED) {
-                                listener.onResponse(true);
-                            } else {
-                                listener.onFailure(new RuntimeException("Failed to put generating index insight doc"));
-                            }
-                        } catch (Exception e) {
-                            listener.onFailure(e);
-                        }
-                    }
-                });
-        } catch (Exception e) {
-            listener.onFailure(e);
+        if (docId != null) {
+            memory.update(docId, indexInsight.toMap(), ActionListener.wrap(r -> {
+                listener.onResponse(true);
+            }, e -> {listener.onFailure(e);}));
+        } else {
+            memory.executeConnectorAction("add_memory", buildWriteIndexInsightQuery(indexInsight), ActionListener.wrap(r -> {listener.onResponse(true);}, e -> {listener.onFailure(e);}));
         }
     }
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.engine.indexInsight;
 
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 
@@ -25,7 +25,12 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.IndexInsightTaskStatus;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 import org.opensearch.ml.common.utils.mergeMetaDataUtils.MergeRuleHelper;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.search.SearchHit;
@@ -88,8 +93,8 @@ public class StatisticalDataTask extends AbstractIndexInsightTask {
         detailed information: %s
         """;
 
-    public StatisticalDataTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn) {
-        super(MLIndexInsightType.STATISTICAL_DATA, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn);
+    public StatisticalDataTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn, NamedXContentRegistry xContentRegistry) {
+        super(MLIndexInsightType.STATISTICAL_DATA, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn, xContentRegistry);
     }
 
     @Override

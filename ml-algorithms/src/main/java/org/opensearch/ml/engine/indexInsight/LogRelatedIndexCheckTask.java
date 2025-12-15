@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.ml.common.indexInsight;
+package org.opensearch.ml.engine.indexInsight;
 
 import static org.opensearch.ml.common.utils.StringUtils.MAPPER;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
@@ -16,7 +16,11 @@ import java.util.Map;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.ml.common.indexInsight.IndexInsight;
+import org.opensearch.ml.common.indexInsight.IndexInsightTask;
+import org.opensearch.ml.common.indexInsight.MLIndexInsightType;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -25,6 +29,8 @@ import org.opensearch.transport.client.Client;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import lombok.extern.log4j.Log4j2;
+
+import javax.naming.Name;
 
 /** Check whether the index is log-related for downstream task：Log-based RCA analysis
 1. Judge whether the index is related to log
@@ -81,8 +87,8 @@ public class LogRelatedIndexCheckTask extends AbstractIndexInsightTask {
             - Your judgment should be based on both semantics and field patterns (e.g., field names like "message", "log", "trace", "span", etc).
             """;
 
-    public LogRelatedIndexCheckTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn) {
-        super(MLIndexInsightType.LOG_RELATED_INDEX_CHECK, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn);
+    public LogRelatedIndexCheckTask(String sourceIndex, Client client, SdkClient sdkClient, String cmkRoleArn, String cmkAssumeRoleArn, NamedXContentRegistry xContentRegistry) {
+        super(MLIndexInsightType.LOG_RELATED_INDEX_CHECK, sourceIndex, client, sdkClient, cmkRoleArn, cmkAssumeRoleArn, xContentRegistry);
     }
 
     @Override

@@ -79,7 +79,9 @@ import org.opensearch.ml.engine.algorithms.contextmanager.ToolsOutputTruncateMan
 import org.opensearch.ml.engine.annotation.Function;
 import org.opensearch.ml.engine.encryptor.Encryptor;
 import org.opensearch.ml.engine.indices.MLIndicesHandler;
+import org.opensearch.ml.engine.memory.AgenticConversationMemory;
 import org.opensearch.ml.engine.memory.ConversationIndexMessage;
+import org.opensearch.ml.engine.memory.RemoteAgenticConversationMemory;
 import org.opensearch.ml.memory.action.conversation.CreateInteractionResponse;
 import org.opensearch.ml.memory.action.conversation.GetInteractionAction;
 import org.opensearch.ml.memory.action.conversation.GetInteractionRequest;
@@ -462,6 +464,9 @@ public class MLAgentExecutor implements Executable, SettingsChangeListener {
         TransportChannel channel,
         HookRegistry hookRegistry
     ) {
+        if (memory instanceof RemoteAgenticConversationMemory) {
+            client.threadPool().getThreadContext().putTransient(RemoteAgenticConversationMemory.TYPE, memory);
+        }
         String appType = mlAgent.getAppType();
         String question = inputDataSet.getParameters().get(QUESTION);
         String regenerateInteractionId = inputDataSet.getParameters().get(REGENERATE_INTERACTION_ID);

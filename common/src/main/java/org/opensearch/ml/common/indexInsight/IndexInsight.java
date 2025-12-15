@@ -11,6 +11,8 @@ import static org.opensearch.ml.common.CommonValue.TENANT_ID_FIELD;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -143,6 +145,16 @@ public class IndexInsight implements ToXContentObject, Writeable {
         builder.field(LAST_UPDATE_FIELD, lastUpdatedTime.toEpochMilli());
         builder.endObject();
         return builder;
+    }
+
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
+        map.put(INDEX_NAME_FIELD, index);
+        map.put(CONTENT_FIELD, content);
+        map.put(STATUS_FIELD, status.toString());
+        map.put(TASK_TYPE_FIELD, taskType.toString());
+        map.put(LAST_UPDATE_FIELD, lastUpdatedTime);
+        return map;
     }
 
     public static IndexInsight fromStream(StreamInput in) throws IOException {

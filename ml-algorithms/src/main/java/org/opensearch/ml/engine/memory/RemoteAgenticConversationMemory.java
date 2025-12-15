@@ -70,7 +70,7 @@ public class RemoteAgenticConversationMemory implements Memory<Message, CreateIn
 
     public static final String TYPE = MLMemoryType.REMOTE_AGENTIC_MEMORY.name();
     private static final String SESSION_ID_FIELD = "session_id";
-    private static final String CREATED_TIME_FIELD = "created_time";
+    public static final String CREATED_TIME_FIELD = "created_time";
     private static final Gson GSON = new Gson();
 
     private final String conversationId;
@@ -566,7 +566,7 @@ public class RemoteAgenticConversationMemory implements Memory<Message, CreateIn
     /**
      * Helper method to execute connector actions
      */
-    private void executeConnectorAction(String action, Map<String, Object> parameters, ActionListener<String> listener) {
+    public void executeConnectorAction(String action, Map<String, Object> parameters, ActionListener<String> listener) {
         // Log the action being executed for debugging
         if (log.isDebugEnabled()) {
             Map<String, Object> actionDebug = new HashMap<>();
@@ -678,7 +678,7 @@ public class RemoteAgenticConversationMemory implements Memory<Message, CreateIn
     /**
      * Parse JSON string into SearchResponse using OpenSearch's standard parser
      */
-    private SearchResponse parseSearchResponse(String jsonResponse) throws IOException {
+    public SearchResponse parseSearchResponse(String jsonResponse) throws IOException {
         try (XContentParser parser = jsonXContent.createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, jsonResponse)) {
             return SearchResponse.fromXContent(parser);
         }

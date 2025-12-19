@@ -139,8 +139,7 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         }, listener::onFailure));
     }
 
-    protected void handleExistingDoc(Map<String, Object> originalSource, String tenantId, ActionListener<IndexInsight> listener) {
-        Map<String, Object> source = (Map<String, Object>) originalSource.get("structured_data_blob");
+    protected void handleExistingDoc(Map<String, Object> source, String tenantId, ActionListener<IndexInsight> listener) {
         String currentStatus = (String) source.get(IndexInsight.STATUS_FIELD);
         Object v = source.get(IndexInsight.LAST_UPDATE_FIELD);
         Long lastUpdateTime = (v == null) ? null
@@ -310,7 +309,7 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         String docId = generateDocId(taskType);
         getIndexInsight(docId, tenantId, ActionListener.wrap(getResponse -> {
             try {
-                String content = getResponse.getOrDefault(IndexInsight.CONTENT_FIELD, "").toString();
+                String content = getResponse.getOrDefault(IndexInsight.CONTENT_FIELD, "{}").toString();
                 Map<String, Object> contentMap = gson.fromJson(content, Map.class);
                 listener.onResponse(contentMap);
             } catch (Exception e) {

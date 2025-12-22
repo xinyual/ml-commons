@@ -12,6 +12,7 @@ import static org.opensearch.ml.common.CommonValue.INDEX_INSIGHT_UPDATE_INTERVAL
 import static org.opensearch.ml.common.CommonValue.ML_INDEX_INSIGHT_STORAGE_INDEX;
 import static org.opensearch.ml.common.indexInsight.IndexInsight.INDEX_NAME_FIELD;
 import static org.opensearch.ml.common.indexInsight.IndexInsight.TASK_TYPE_FIELD;
+import static org.opensearch.ml.common.memorycontainer.MemoryContainerConstants.MEMORY_CONTAINER_ID_FIELD;
 import static org.opensearch.ml.common.utils.StringUtils.gson;
 import static org.opensearch.ml.engine.memory.RemoteAgenticConversationMemory.CREATED_TIME_FIELD;
 
@@ -117,7 +118,9 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         this.cmkAssumeRoleArn = cmkAssumeRoleArn;
         this.xContentRegistry = xContentRegistry;
         this.memory = client.threadPool().getThreadContext().getTransient(RemoteAgenticConversationMemory.TYPE);
-
+        if (!Objects.isNull(this.memory)) {
+            log.error("Provided memory, index insight will use memory layer");
+        }
     }
 
     /**
@@ -335,7 +338,8 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
     }
 
     private void getIndexInsight(String docId, String tenantId, ActionListener<Map<String, Object>> listener) throws IOException {
-        this.memory.executeConnectorAction("search_memories", buildGetIndexInsightQuery(), ActionListener.wrap(r -> {
+        this.memory.executeConnectorAction("search_memories", buildGetIndexInsightQuery(tenantId), ActionListener.wrap(r -> {
+            log.error("get index insight result: " + r);
             try (XContentParser parser = jsonXContent.createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, r)) {
                 SearchResponse searchResponse = SearchResponse.fromXContent(parser);
                 if (searchResponse.getHits() != null && searchResponse.getHits().getHits() != null) {
@@ -344,28 +348,33 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
                         this.docId = hits[0].getId();
                         Map<String, Object> sourceMap = hits[0].getSourceAsMap();
                         if (sourceMap.containsKey("structured_data_blob")) {
+                            Class<?> clazz = sourceMap.get("structured_data_blob").getClass();
+                            log.error("the structured data blob type is: " + clazz.getName());
                             listener.onResponse((Map<String, Object>) sourceMap.get("structured_data_blob"));
                         }
                         return;
                     }
                 }
+                log.error("fail to get index insight");
                 listener.onResponse(null);
             } catch (Exception e) {
-                listener.onFailure(e);
+                log.error("fail to get index insight with error: {}", e.getMessage());
+                listener.onResponse(null);
+                //listener.onFailure(e);
             }}, e -> {listener.onFailure(e);}
 
         ));
     }
 
-    private Map<String, Object> buildGetIndexInsightQuery() {
-        String applicationId = client.threadPool().getThreadContext().getHeader(APPLICATION_ID);
-        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID);
+    private Map<String, Object> buildGetIndexInsightQuery(String tenantId) {
+        //String applicationId = client.threadPool().getThreadContext().getHeader(APPLICATION_ID);
+        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID_FIELD);
         Map<String, Object> query = new HashMap<>();
         Map<String, Object> bool = new HashMap<>();
         List<Map<String, Object>> must = new ArrayList<>();
         // Must match session_id
         Map<String, Object> sessionTerm = new HashMap<>();
-        sessionTerm.put("namespace." + APPLICATION_ID, applicationId);
+        sessionTerm.put("namespace." + APPLICATION_ID, tenantId);
         must.add(Map.of("term", sessionTerm));
 
         Map<String, Object> metaDataTerm = new HashMap<>();
@@ -385,7 +394,7 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
 
         // Build search request
         Map<String, Object> searchRequest = new HashMap<>();
-        searchRequest.put("memory_container_id", memoryContainerId);
+        searchRequest.put("memory_container_id", this.memory.getMemoryContainerId());
         searchRequest.put("memory_type", "working");
         searchRequest.put("query", query);
         searchRequest.put("size", 1);
@@ -393,11 +402,9 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
         return searchRequest;
     }
 
-    private Map<String, Object> buildWriteIndexInsightQuery(IndexInsight indexInsight) {
-        String applicationId = client.threadPool().getThreadContext().getHeader(APPLICATION_ID);
-        String memoryContainerId = client.threadPool().getThreadContext().getHeader(MEMORY_CONTAINER_ID);
+    private Map<String, Object> buildWriteIndexInsightQuery(IndexInsight indexInsight, String tenantId) {
         Map<String, String> namespace = new HashMap<>();
-        namespace.put(APPLICATION_ID, applicationId);
+        namespace.put(APPLICATION_ID, tenantId);
 
         Map<String, String> metadata = new HashMap<>();
         metadata.put("index", sourceIndex);
@@ -409,7 +416,7 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
 
         // Build request body for add_memory action
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("memory_container_id", memoryContainerId);
+        requestBody.put("memory_container_id", this.memory.getMemoryContainerId());
         requestBody.put("structured_data_blob", structuredData);
         requestBody.put("message_id", null); // Store trace number in messageId field (null for messages)
         requestBody.put("namespace", namespace);
@@ -420,11 +427,13 @@ public abstract class AbstractIndexInsightTask implements IndexInsightTask {
 
     private void writeIndexInsight(IndexInsight indexInsight, String tenantId, ActionListener<Boolean> listener) {
         if (docId != null) {
+            log.error("we have existing doc id, will call update api in index insight");
             memory.update(docId, indexInsight.toMap(), ActionListener.wrap(r -> {
                 listener.onResponse(true);
             }, e -> {listener.onFailure(e);}));
         } else {
-            memory.executeConnectorAction("add_memory", buildWriteIndexInsightQuery(indexInsight), ActionListener.wrap(r -> {listener.onResponse(true);}, e -> {listener.onFailure(e);}));
+            log.error("we don't have existing doc id, will call write api in index insight");
+            memory.executeConnectorAction("add_memory", buildWriteIndexInsightQuery(indexInsight, tenantId), ActionListener.wrap(r -> {listener.onResponse(true);}, listener::onFailure));
         }
     }
 

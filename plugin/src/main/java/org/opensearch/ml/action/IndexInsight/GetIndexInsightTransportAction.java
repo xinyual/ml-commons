@@ -7,6 +7,7 @@ package org.opensearch.ml.action.IndexInsight;
 
 import static org.opensearch.ml.common.settings.MLCommonsSettings.ML_COMMONS_INDEX_INSIGHT_FEATURE_ENABLED;
 
+import java.io.IOException;
 import java.time.Instant;
 
 import org.opensearch.action.ActionRequest;
@@ -100,7 +101,7 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         MLIndexInsightGetRequest request,
         String tenantId,
         ActionListener<MLIndexInsightGetResponse> listener
-    ) {
+    ) throws IOException {
         if (request.getTargetIndexInsight() == MLIndexInsightType.ALL) {
             StringBuilder combinedContent = new StringBuilder();
             executeTaskChain(request.getIndexName(), tenantId, combinedContent, listener, 0, null);
@@ -123,7 +124,7 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         ActionListener<MLIndexInsightGetResponse> listener,
         int taskIndex,
         Instant lastSuccessTime
-    ) {
+    ) throws IOException {
         if (taskIndex >= ALL_TYPE_ORDER.length) {
             // Check if all tasks failed
             if (combinedContent.length() == 0) {
@@ -147,7 +148,13 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
             ActionListener
                 .wrap(
                     time -> executeTaskChain(indexName, tenantId, combinedContent, listener, taskIndex + 1, time),
-                    e -> executeTaskChain(indexName, tenantId, combinedContent, listener, taskIndex + 1, lastSuccessTime)
+                    e -> {
+                        try {
+                            executeTaskChain(indexName, tenantId, combinedContent, listener, taskIndex + 1, lastSuccessTime);
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
                 )
         );
     }
@@ -157,7 +164,7 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
         String tenantId,
         StringBuilder combinedContent,
         ActionListener<Instant> listener
-    ) {
+    ) throws IOException {
         createTask(request).execute(tenantId, ActionListener.wrap(insight -> {
             if (combinedContent.length() > 0) {
                 combinedContent.append("\n\n");

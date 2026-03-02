@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import org.apache.logging.log4j.util.Strings;
 import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
 import org.opensearch.action.admin.indices.mapping.get.GetMappingsRequest;
 import org.opensearch.action.search.SearchRequest;
@@ -87,44 +88,44 @@ public class IndexCorrelationTask extends AbstractIndexInsightTask {
 
     private List<String> allIndices;
     private Map<String, PatternInfo> detectedPatterns;
+    private String previousOutput;
 
     public final double OVERLAP_THRESHOLD = 0.85;
     public final int SAMPLE_DOCS_LIMIT = 5;
     public final int MAX_FIELDS_DISPLAY = 30;
     public final String COMPLETE_STATUS = "COMPLETED";
 
-    public IndexCorrelationTask(String sourceIndex, Client client, SdkClient sdkClient) {
+    public IndexCorrelationTask(String sourceIndex, Client client, SdkClient sdkClient, String previousOutput) {
         super(MLIndexInsightType.INDEX_CORRELATION, sourceIndex, client, sdkClient);
         this.detectedPatterns = new HashMap<>();
+        this.previousOutput = previousOutput;
     }
 
     @Override
     public void runTask(String tenantId, ActionListener<IndexInsight> listener) {
         try {
             // Step 1: List all indices
-            listAllIndices(ActionListener.wrap(indices -> {
-                allIndices = indices;
-                log.info("Found {} indices in cluster", allIndices.size());
+            List<String> indices = parsePreviousToolOutput(previousOutput);
+            allIndices = indices;
+            log.info("Found {} indices in cluster", allIndices.size());
 
-                // Step 2: Extract patterns
-                Map<String, List<String>> patterns = extractIndexPatterns(allIndices);
-                log.info("Extracted {} index patterns", patterns.size());
+            // Step 2: Extract patterns
+            Map<String, List<String>> patterns = extractIndexPatterns(allIndices);
+            log.info("Extracted {} index patterns", patterns.size());
 
-                // Step 3: Detect types for each pattern
-                detectPatternTypes(patterns, tenantId, ActionListener.wrap(patternInfoMap -> {
-                    detectedPatterns = patternInfoMap;
+            // Step 3: Detect types for each pattern
+            detectPatternTypes(patterns, tenantId, ActionListener.wrap(patternInfoMap -> {
+                detectedPatterns = patternInfoMap;
 
-                    // Step 4: Build result
-                    buildCorrelationResult(tenantId, ActionListener.wrap(result -> {
-                        saveResult(MAPPER.writeValueAsString(result), tenantId, ActionListener.wrap(insight -> {
-                            log.info("Index correlation completed for index: {}", sourceIndex);
-                            listener.onResponse(insight);
-                        }, e -> handleError("Failed to save correlation result for {}", e, tenantId, listener)));
-                    }, e -> handleError("Failed to build correlation result for {}", e, tenantId, listener)));
+                // Step 4: Build result
+                buildCorrelationResult(tenantId, ActionListener.wrap(result -> {
+                    saveResult(MAPPER.writeValueAsString(result), tenantId, ActionListener.wrap(insight -> {
+                        log.info("Index correlation completed for index: {}", sourceIndex);
+                        listener.onResponse(insight);
+                    }, e -> handleError("Failed to save correlation result for {}", e, tenantId, listener)));
+                }, e -> handleError("Failed to build correlation result for {}", e, tenantId, listener)));
 
-                }, e -> handleError("Failed to detect pattern types for {}", e, tenantId, listener)));
-
-            }, e -> handleError("Failed to list indices for {}", e, tenantId, listener)));
+            }, e -> handleError("Failed to detect pattern types for {}", e, tenantId, listener)));
 
         } catch (Exception e) {
             handleError("Failed index correlation for {}", e, tenantId, listener);
@@ -1252,6 +1253,21 @@ public class IndexCorrelationTask extends AbstractIndexInsightTask {
             log.error("Failed to query cache for pattern: {}", pattern, e);
             listener.onFailure(e);
         }));
+    }
+
+    private List<String> parsePreviousToolOutput(String listIndexOutput) {
+        if (Strings.isBlank(listIndexOutput)) {
+            return List.of();
+        }
+        List<String> indicesNames = new ArrayList<>();
+        String[] lines = listIndexOutput.split("\\\\r\\\\n|\\\\n|\\\\r|\\R");
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) continue;
+            String indexName = line.split(",", -1)[3];
+            indicesNames.add(indexName);
+        }
+        return indicesNames;
     }
 
     /**

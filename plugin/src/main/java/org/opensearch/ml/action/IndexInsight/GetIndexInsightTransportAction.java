@@ -258,7 +258,7 @@ public class GetIndexInsightTransportAction extends HandledTransportAction<Actio
             case LOG_RELATED_INDEX_CHECK:
                 return new LogRelatedIndexCheckTask(request.getIndexName(), client, sdkClient);
             case INDEX_CORRELATION:
-                return new IndexCorrelationTask(request.getIndexName(), client, sdkClient);
+                return new IndexCorrelationTask(request.getIndexName(), client, sdkClient, request.getPreviousOutput());
             case PATTERN_TYPE_CACHE:
                 throw new IllegalArgumentException("PATTERN_TYPE_CACHE is internal and cannot be queried directly");
             default:

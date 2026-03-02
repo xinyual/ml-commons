@@ -83,7 +83,7 @@ public class IndexCorrelationTaskTests {
         // Clear mappings before each test
         indexMappings.clear();
 
-        task = new IndexCorrelationTask("jaeger-span-2025-12-19", client, sdkClient);
+        task = new IndexCorrelationTask("jaeger-span-2025-12-19", client, sdkClient, null);
         listener = mock(ActionListener.class);
     }
 

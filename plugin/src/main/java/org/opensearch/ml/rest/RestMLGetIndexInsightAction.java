@@ -71,6 +71,6 @@ public class RestMLGetIndexInsightAction extends BaseRestHandler {
             insightType = STATISTICAL_DATA.name();
         }
         MLIndexInsightType type = MLIndexInsightType.fromString(insightType);
-        return new MLIndexInsightGetRequest(indexName, type, tenantId);
+        return new MLIndexInsightGetRequest(indexName, type, tenantId, null);
     }
 }

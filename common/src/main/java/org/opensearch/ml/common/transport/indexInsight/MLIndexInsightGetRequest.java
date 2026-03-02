@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Map;
 
 import org.opensearch.action.ActionRequest;
 import org.opensearch.action.ActionRequestValidationException;
@@ -29,11 +30,13 @@ public class MLIndexInsightGetRequest extends ActionRequest {
     String indexName;
     MLIndexInsightType targetIndexInsight;
     String tenantId;
+    String previousOutput;
 
-    public MLIndexInsightGetRequest(String indexName, MLIndexInsightType targetIndexInsight, String tenantId) {
+    public MLIndexInsightGetRequest(String indexName, MLIndexInsightType targetIndexInsight, String tenantId, String previousOutput) {
         this.indexName = indexName;
         this.targetIndexInsight = targetIndexInsight;
         this.tenantId = tenantId;
+        this.previousOutput = previousOutput;
     }
 
     public MLIndexInsightGetRequest(StreamInput in) throws IOException {
@@ -41,6 +44,7 @@ public class MLIndexInsightGetRequest extends ActionRequest {
         this.indexName = in.readString();
         this.targetIndexInsight = MLIndexInsightType.fromString(in.readString());
         this.tenantId = in.readOptionalString();
+        this.previousOutput = in.readOptionalString();
     }
 
     @Override
@@ -49,6 +53,7 @@ public class MLIndexInsightGetRequest extends ActionRequest {
         out.writeString(this.indexName);
         out.writeString(this.targetIndexInsight.name());
         out.writeOptionalString(tenantId);
+        out.writeOptionalString(previousOutput);
     }
 
     @Override
